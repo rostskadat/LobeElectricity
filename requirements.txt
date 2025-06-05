@@ -1,0 +1,5 @@
+PyYAML==6.0.1
+coloredlogs==15.0.1
+python-dotenv==1.0.1
+pdfplumber==0.11.6
+openpyxl==3.1.5

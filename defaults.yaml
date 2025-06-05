@@ -1,0 +1,25 @@
+# input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Comunidad/Electricidad
+input-dir: bills
+input-locale: es_ES.utf8
+output: bills.xlsx
+limit: -1
+# BEWARE: the order is the one below
+columns:
+  bill_id: Nº de factura
+  billing_date: Fecha de factura
+  billing_period_start: Inicio del periodo
+  billing_period_end: Fin del periodo
+  billed_power_capacity: Potencia
+  billed_energy_consumed: Energía
+  billed_amount_0: Importe a pagar
+  billed_amount_1: Importe facturado
+  is_rectification: Rectificación
+  P1: P1
+  P2: P2
+  P3: P3
+  P4: P4
+  P5: P5
+  P6: P6
+  Pleno: Pleno
+  Llano: Llano
+  Valle: Valle
