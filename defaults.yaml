@@ -1,10 +1,17 @@
-# input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Comunidad/Electricidad
+# input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Comunidad/Electricidad/New contract - TotalEnergies
+# input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Contrato Electricidad
 input-dir: bills
 input-locale: es_ES.utf8
 output: bills.xlsx
 limit: -1
+# Detect the emissor of the bill, and extract accordingly
+dispatchers:
+  "Energia Nufri S.L.U.": extract_nufri_bill
+  "A81948077": extract_endesa_bill
+  "A87803862": extract_total_bill
+
 # BEWARE: the order is the one below
-columns:
+column_labels:
   bill_id: Nº de factura
   billing_date: Fecha de factura
   billing_period_start: Inicio del periodo
@@ -20,6 +27,12 @@ columns:
   P4: P4
   P5: P5
   P6: P6
-  Pleno: Pleno
-  Llano: Llano
-  Valle: Valle
+  file: Fichero
+sheet_names:
+  ES0031300855143009DM0F: E5 - 09DM0F
+  ES0031300855145010GM0F: E6 - 10GM0F
+  ES0031300855146009RS0F: E7 - 09RS0F
+  ES0031300855147010EG0F: E8 - 10EG0F
+  ES0031300855147001KH0F: AEROTERMTA - 01KH0F
+  ES0031300855143010DY0F: GARAJE - 10DY0F
+  ES0031300855147011EM0F: INCENDIOS - 11EM0F

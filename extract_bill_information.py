@@ -5,8 +5,6 @@ Extract bill information from PDF files and generate a report.
 
 try:
     import coloredlogs
-    import csv
-    import itertools
     import locale
     import logging
     import os
@@ -18,6 +16,7 @@ try:
     from datetime import datetime
     from dotenv import load_dotenv
     from openpyxl import Workbook
+    from os.path import basename
     from pprint import pprint
 except ModuleNotFoundError as e:
     print(f"{e}. Did you load your environment?")
@@ -26,24 +25,197 @@ except ModuleNotFoundError as e:
 load_dotenv()
 logger = logging.getLogger()
 
+# i.e.: +/-0.000,00 €
 AMOUNT_PATTERN = re.compile(r"[+-]?(?:\d{1,3}(?:\.\d{3})*|\d+),\d{2} ?€")
 # i.e.: P4 1.18.4 1.278,00 2.578,00 1,00 0,00 1.300,00
-PX_PATTERN = re.compile(r"^(P[123456]) 1\.18\.[123456]( (?:\d{1,3}(?:\.\d{3})*|\d+),\d{2}){5}.*")
-PV_PATTERN = re.compile(r".*(Punta|Llano|Valle)( (?:\d{1,3}(?:\.\d{3})*|\d+),\d{2}){5}.*")
+ENDESA_PX_PATTERN = re.compile(r"^(P[123456]) 1\.18\.[123456]( (?:\d{1,3}(?:\.\d{3})*|\d+),\d{2}){5}.*")
+ENDESA_PV_PATTERN = re.compile(r".*(Punta|Llano|Valle)( (?:\d{1,3}(?:\.\d{3})*|\d+),\d{2}){5}.*")
+# i.e.: Px 7.994 7.994 0 66 66 0 0,00 0,00 0,00
+TOTAL_PV_PATTERN = re.compile(r"^(P[123456])( (?:\d{1,3}(?:\.\d{3})*|\d+)(,\d{2})?){3}( (?:\d{1,3}(?:\.\d{3})*|\d+)(,\d{2})?){6}")
 
-# def generate_csv_report(args, tickets_by_room:map):
-#     todays_date = datetime.today().strftime(DEFAULT_FMT)
-#     document_name = f"tickets-{todays_date}.csv"
-#     if not os.path.isdir(args.output_dir):
-#         os.makedirs(args.output_dir)
-#     report_filename = os.path.join(args.output_dir, document_name)
-#     logger.info(f"Saving report {report_filename} ...")
-#     with open(report_filename, 'w', newline='') as csvfile:
-#         fieldnames = ['room', 'ticket_number', 'state', 'accepted', 'creation_time', 'description', 'answer']
-#         writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
-#         writer.writeheader()
-#         rows = list(itertools.chain(*tickets_by_room.values()))
-#         writer.writerows(rows)
+def _extract_billed_amount(data:dict, key:str) -> str:
+    billed_amount = AMOUNT_PATTERN.findall( data[key])
+    if len(billed_amount) != 1:
+        return None
+    return billed_amount[0]
+
+
+def _get_default_bill_info():
+    return {
+        'is_ours': False,
+        'bill_id': None,
+        'billing_date': None,
+        'billing_period': None,
+        'billed_power_capacity': None,
+        'billed_energy_consumed': None,
+        'billed_amount_0': None,
+        'billed_amount_1': None,
+        'is_rectification': False,
+        # 'P1': None,
+        # 'P2': None,
+        # 'P3': None,
+        # 'P4': None,
+        # 'P5': None,
+        # 'P6': None,
+        'cups': None,
+    }
+
+
+def extract_dispatcher(dispatchers:dict, file:str):
+    logger.info(f"Extracting information from bill '{file}' ...")
+    with pdfplumber.open(file) as pdf:
+        first_page = pdf.pages[0].extract_text()
+        found_extractor = False
+        for dispatcher, extractor in dispatchers.items():
+            if extractor not in globals() or not callable(globals()[extractor]):
+                raise ValueError(f"Extractor '{extractor}' not found or not callable.")
+            if dispatcher in first_page:
+                logger.debug(f"Detected '{dispatcher}' bill. Using {extractor} ...")
+                return globals()[extractor](file, pdf)
+        if not found_extractor:
+            logger.error(f"Could not detect the type of bill for '{file}'. Skipping")
+            return None
+
+
+def extract_nufri_bill(file, pdf):
+    bill_info = _get_default_bill_info()
+    return bill_info
+
+
+def _extract_total_power(line:str) -> str:
+    power_type = None
+    power_amount = None
+    match = TOTAL_PV_PATTERN.match(line)
+    if match:
+        power_type = match.group(1)
+        power_amount = match.group(2)
+    return power_type, power_amount
+
+
+def extract_total_bill(file, pdf):
+    bill_info = _get_default_bill_info()
+    first_page = pdf.pages[0]
+    for line in first_page.extract_text().split('\n'):
+        if 'CAMPANILLA' in line:
+            bill_info['is_ours'] = True
+            continue
+        if 'Nº Factura' in line:
+            bill_info['bill_id'] = line.split(' ')[-1].strip()
+            continue
+        if 'Fecha emisión factura:' in line:
+            date_obj = datetime.strptime(line.split(':')[-1].strip(), "%d de %B de %Y")
+            bill_info['billing_date'] = date_obj.strftime("%d/%m/%Y")
+            continue
+        if 'Periodo de facturación:' in line:
+            bill_info['billing_period'] = line.split(':')[-1].strip()
+            continue
+        if line.startswith('Potencia '):
+            bill_info['billed_power_capacity'] = line
+            continue
+        if line.startswith('Energía '):
+            bill_info['billed_energy_consumed'] = line
+            continue
+        if line.startswith('TOTAL '):
+            bill_info['billed_amount_0'] = line
+            bill_info['billed_amount_1'] = line
+            continue
+        if '(CUPS):' in line :
+            bill_info['cups'] = line.split(':')[-1].strip()
+            continue
+
+    second_page = pdf.pages[1]
+    for line in second_page.extract_text().split('\n'):
+        power_type, power_amount = _extract_total_power(line)
+        if power_type is not None:
+            bill_info[power_type] = power_amount
+            continue
+
+    if not bill_info['is_ours']:
+        logger.warning(f"File '{file}' does not belong to us. Skipping.")
+        return None
+    if 'P1' not in bill_info:
+        logger.warning(f"Power reading not on 2nd nor on the 3rd page for '{file}'. Skipping.")
+        return None
+    return bill_info
+
+
+def _extract_endesa_power(line:str) -> str:
+    power_type = None
+    power_amount = None
+    match = ENDESA_PX_PATTERN.match(line)
+    if match:
+        power_type = match.group(1)
+        power_amount = match.group(2)
+    else:
+        match = ENDESA_PV_PATTERN.match(line)
+        if match:
+            power_type = match.group(1)
+            power_amount = match.group(2)
+    if power_type == 'Punta':
+        power_type = 'P1'
+    elif power_type == 'Llano':
+        power_type = 'P2'
+    elif power_type == 'Valle':
+        power_type = 'P3'
+    return power_type, power_amount
+
+
+def extract_endesa_bill(file, pdf):
+    bill_info = _get_default_bill_info()
+    first_page = pdf.pages[0]
+    for line in first_page.extract_text().split('\n'):
+        if 'CAMPANILLA' in line:
+            bill_info['is_ours'] = True
+            continue
+        if 'Nº factura:' in line or 'Nº de factura:' in line or 'Nºfactura:' in line:
+            bill_info['bill_id'] = line.split(':')[-1].strip()
+            continue
+        if 'Fecha emisión factura:' in line or 'Fechaemisiónfactura:' in line:
+            bill_info['billing_date'] = line.split(':')[-1].strip()
+            continue
+        if 'Periodo de facturación:' in line or 'Periododefacturación' in line:
+            bill_info['billing_period'] = line.split(':')[-1].strip()
+            continue
+        if line.startswith('Potencia '):
+            bill_info['billed_power_capacity'] = line
+            continue
+        if line.startswith('Energía '):
+            bill_info['billed_energy_consumed'] = line
+            continue
+        if line.startswith('Total '):
+            bill_info['billed_amount_0'] = line
+            continue
+
+    second_page = pdf.pages[1]
+    for line in second_page.extract_text().split('\n'):
+        if 'CUPS' in line:
+            bill_info['cups'] = line.split(':')[-1].strip()
+            bill_info['cups'] = bill_info['cups'].split('(')[0].strip()  # Remove any additional info in parentheses
+            continue
+        if 'TOTAL ' in line:
+            bill_info['billed_amount_1'] = line
+            # continue # Sometimes the TOTAL and the power readings are on the same line
+        power_type, power_amount = _extract_endesa_power(line)
+        if power_type is not None:
+            bill_info[power_type] = power_amount
+            continue
+
+    if 'P1' not in bill_info:
+        if len(pdf.pages) > 2:
+            third_page = pdf.pages[2]
+            for line in third_page.extract_text().split('\n'):
+                power_type, power_amount = _extract_endesa_power(line)
+                if power_type is not None:
+                    bill_info[power_type] = power_amount
+
+    if not bill_info['is_ours']:
+        logger.warning(f"File '{file}' does not belong to us. Skipping.")
+        return None
+    if 'P1' not in bill_info:
+        logger.warning(f"Power reading not on 2nd nor on the 3rd page for '{file}'. Skipping.")
+        return None
+    return bill_info
+
 
 def is_bill_sane(data:dict):
     # check that all the keys have a value
@@ -55,95 +227,6 @@ def is_bill_sane(data:dict):
             is_sane = False
     return is_sane, missing_keys
 
-def _extract_billed_amount(data:dict, key:str) -> str:
-    billed_amount = AMOUNT_PATTERN.findall( data[key])
-    if len(billed_amount) != 1:
-        return None
-    return billed_amount[0]
-    # return locale.atof(billed_amount[0].replace(' ','').replace('€',''))
-
-def _extract_power(line) -> str:
-    power_type = None
-    power_amount = None
-    match = PX_PATTERN.match(line)
-    if match:
-        power_type = match.group(1)
-        power_amount = match.group(2)
-    else:
-        match = PV_PATTERN.match(line)
-        if match:
-            power_type = match.group(1)
-            power_amount = match.group(2)
-    return power_type, power_amount
-
-def extract_endesa_bill(file):
-    logger.debug(f"Extracting bill info from ENDESA file '{file}' ...")
-    bill_info = {
-        'is_ours': False,
-        'bill_id': None,
-        'billing_date': None,
-        'billing_period': None,
-        'billed_power_capacity': None,
-        'billed_energy_consumed': None,
-        'billed_amount_0': None,
-        'billed_amount_1': None,
-        'is_rectification': False,
-        'cups': None,
-    }
-    with pdfplumber.open(file) as pdf:
-        first_page = pdf.pages[0]
-        for line in first_page.extract_text().split('\n'):
-            if 'CAMPANILLA' in line:
-                bill_info['is_ours'] = True
-                continue
-            if 'Nº factura:' in line or 'Nº de factura:' in line or 'Nºfactura:' in line:
-                bill_info['bill_id'] = line.split(':')[-1].strip()
-                continue
-            if 'Fecha emisión factura:' in line or 'Fechaemisiónfactura:' in line:
-                bill_info['billing_date'] = line.split(':')[-1].strip()
-                continue
-            if 'Periodo de facturación:' in line or 'Periododefacturación' in line:
-                bill_info['billing_period'] = line.split(':')[-1].strip()
-                continue
-            if line.startswith('Potencia '):
-                bill_info['billed_power_capacity'] = line
-                continue
-            if line.startswith('Energía '):
-                bill_info['billed_energy_consumed'] = line
-                continue
-            if line.startswith('Total '):
-                bill_info['billed_amount_0'] = line
-                continue
-
-        second_page = pdf.pages[1]
-        for line in second_page.extract_text().split('\n'):
-            if 'CUPS' in line:
-                bill_info['cups'] = line.split(':')[-1].strip()
-                bill_info['cups'] = bill_info['cups'].split('(')[0].strip()  # Remove any additional info in parentheses
-                continue
-            if 'TOTAL ' in line:
-                bill_info['billed_amount_1'] = line
-                # continue # Sometimes the TOTAL and the power readings are on the same line
-            power_type, power_amount = _extract_power(line)
-            if power_type is not None:
-                bill_info[power_type] = power_amount
-                continue
-
-        if 'P1' not in bill_info and 'Punta' not in bill_info:
-            if len(pdf.pages) > 2:
-                third_page = pdf.pages[2]
-                for line in third_page.extract_text().split('\n'):
-                    power_type, power_amount = _extract_power(line)
-                    if power_type is not None:
-                        bill_info[power_type] = power_amount
-
-    if not bill_info['is_ours']:
-        logger.warning(f"File '{file}' does not belong to us. Skipping.")
-        return None
-    if 'P1' not in bill_info and 'Punta' not in bill_info:
-        logger.warning(f"Power reading not on 2nd nor on the 3rd page for '{file}'. Skipping.")
-        return None
-    return bill_info
 
 def sanitize_bill(data:dict):
     """
@@ -199,17 +282,11 @@ def sanitize_bill(data:dict):
         logger.debug(f"Billed amount 1 '{data['billed_amount_1']}' is different from billed amount 0 '{data['billed_amount_0']}' for CUPS {data['cups']} and bill {data['bill_id']}.")
         data['is_rectification'] = True
 
-    if 'P1' in data:
-        for power_type in ['P1', 'P2', 'P3', 'P4', 'P5', 'P6']:
-            if power_type not in data:
-                logger.error(f"'{power_type}' comsumption has not been extracted from CUPS {data['cups']} and bill {data['bill_id']}.")
-                return None
-            data[power_type] = data[power_type].strip()
-    elif 'Punta' in data:
-        for power_type in ['Punta', 'Llano', 'Valle']:
-            if power_type not in data:
-                logger.error(f"'{power_type}' comsumption has not been extracted from CUPS {data['cups']} and bill {data['bill_id']}.")
-                return None
+    for power_type in ['P1', 'P2', 'P3', 'P4', 'P5', 'P6']:
+        if power_type not in data and power_type in ['P1', 'P2', 'P3']:
+            logger.error(f"Mandatory '{power_type}' comsumption has not been extracted from CUPS {data['cups']} and bill {data['bill_id']}.")
+            return None
+        if power_type in data and data[power_type] is not None: # P4, P5, P6
             data[power_type] = data[power_type].strip()
 
     return data
@@ -218,12 +295,16 @@ def sanitize_bill(data:dict):
 def generate_bill_report(args, bills:dict):
     wb = Workbook()
 
-    column_keys = list(args.defaults['columns'].keys())
-    column_headers = list(args.defaults['columns'].values())
+    column_keys = list(args.defaults['column_labels'].keys())
+    column_headers = list(args.defaults['column_labels'].values())
+    sheet_names = args.defaults['sheet_names']
 
+    sheets = {}
     # Add a new worksheet
-    for cups, bill_infos in bills.items():
-        ws = wb.create_sheet(title=cups)
+    for cups in bills.keys():
+        bill_infos = bills[cups]
+        ws = wb.create_sheet(title=sheet_names[cups])
+        sheets[ws.title] = ws
 
         # Add data to each worksheet
         is_first_row = True
@@ -232,6 +313,11 @@ def generate_bill_report(args, bills:dict):
                 ws.append(column_headers)
                 is_first_row = False
             ws.append([ bill_info.get(h, None) for h in column_keys ])
+
+    ordered_sheets = []
+    for title in args.defaults['sheet_names'].values():
+        ordered_sheets.append(sheets[title])
+    wb._sheets = ordered_sheets
 
     # Save the workbook
     wb.save(args.output)
@@ -254,12 +340,13 @@ def extract_bill_information(args):
 
     bills = {}
     for file in files:
-        bill_info = extract_endesa_bill(file)
+        bill_info = extract_dispatcher(args.defaults['dispatchers'], file)
         if not bill_info:
             continue
         bill_info = sanitize_bill(bill_info)
         if not bill_info:
             continue
+        bill_info['file'] = basename(file)
         cups = bill_info['cups']
         bill_id = bill_info['bill_id']
         if cups not in bills:
@@ -293,7 +380,9 @@ def main():
     args = parse_command_line(defaults)
     args.defaults = defaults
     try:
+        # locale.setlocale(locale.LC_TIME, 'Spanish_Spain.1252')  # On Windows
         locale.setlocale(locale.LC_NUMERIC, args.input_locale)
+        locale.setlocale(locale.LC_TIME, args.input_locale)
         for verbose_package in ['pdfminer.pdfpage']:
             verbose_logger = logging.getLogger(verbose_package)
             verbose_logger.setLevel(level=logging.ERROR)
