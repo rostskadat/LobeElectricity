@@ -23,17 +23,9 @@ function formatAllSheets() {
     if (lastRow === 0) return; // Skip empty sheets
 
     // get a map of column indices
-    columnIndices = getColumnIndices(sheet)
+    const columnIndices = getColumnIndices(sheet)
 
-    // const powerIndices = ["P1", "P2", "P3", "P4", "P5"].map(p => columnIndices[p]);
-    // const averagePrice = "€/kWh"
-    // createAveragePriceColumn(sheet, columnIndices["Importe facturado"], powerIndices, headers.indexOf(averagePrice) , averagePrice)
-    // return
-
-    createLinks(sheet, columnIndices["Nº de factura"], columnIndices["Fichero"])
-
-    freezeColumn(sheet, 3)
-
+    // Setting format in order to allow for calculations
     setColumnFormat(sheet, columnIndices["Fecha de factura"], "date");
     setColumnFormat(sheet, columnIndices["Inicio del periodo"], "date");
     setColumnFormat(sheet, columnIndices["Fin del periodo"], "date");
@@ -47,6 +39,17 @@ function formatAllSheets() {
     setColumnFormat(sheet, columnIndices["P4"], "power");
     setColumnFormat(sheet, columnIndices["P5"], "power");
     setColumnFormat(sheet, columnIndices["P6"], "power");
+
+    // calculate the kWh average price
+    const powerIndices = ["P1", "P2", "P3", "P4", "P5", "P6"].map(p => columnIndices[p]);
+    const averagePrice = "€/kWh"
+    createAveragePriceColumn(sheet, columnIndices["Energía"], powerIndices, columnIndices[averagePrice] , averagePrice)
+    setColumnFormat(sheet, columnIndices[averagePrice], "power_consumption");
+
+    createLinks(sheet, columnIndices["Nº de factura"], columnIndices["Fichero"])
+
+    freezeColumn(sheet, 3)
+
 
     sortByColumn(sheet, columnIndices["Inicio del periodo"])
 
@@ -64,27 +67,36 @@ function formatAllSheets() {
   });
 }
 
-// function createAveragePriceColumn(sheet, billedAmountColumnIndex, powerColumnIndices, columnIndex, columnName) {
-//   if (billedAmountColumnIndex === -1 || powerColumnIndices.some(i => i === -1)) {
-//     throw new Error("One or more required columns ('Importe facturado', P1 to P5) not found.");
-//   }
+function createAveragePriceColumn(sheet, billedAmountColumnIndex, powerColumnIndices, columnIndex, columnName) {
+  if (billedAmountColumnIndex === -1 || powerColumnIndices.some(i => i === -1)) {
+    throw new Error("One or more required columns ('Importe facturado', P1 to P5) not found.");
+  }
 
-//   // Add a new header for the calculated column
-//   if (columnIndex === -1) {
-//     sheet.getRange(1, sheet.getLastColumn()).setValue(columnName);
-//     columnIndex = sheet.getLastColumn();
-//   }
+  // Add a new header for the calculated column
+  if (columnIndex === undefined || columnIndex === -1) {
+    sheet.getRange(1, sheet.getLastColumn()+1).setValue(columnName);
+    columnIndex = sheet.getLastColumn();
+  }
 
-//   // Calculate the average...
-//   const data = sheet.getDataRange().getValues();
-//   for (let i = 1; i < data.length; i++) {
-//     const row = data[i];
-//     const billedAmount = parseFloat(row[billedAmountColumnIndex]);
-//     const powerSum = powerColumnIndices.reduce((sum, idx) => sum + parseFloat(row[idx] || 0), 0);
-//     const averagePrice = powerSum !== 0 ? billedAmount / powerSum : '';
-//     sheet.getRange(i + 1, columnIndex + 1).setValue(averagePrice);
-//   }
-// }
+  // Calculate the average...
+  for (let i = 2; i <= sheet.getLastRow(); i++) { // skip headers
+    const clBilledAmount = columnToLetter(billedAmountColumnIndex)
+    const clPowers = powerColumnIndices.map(c => `${columnToLetter(c)}${i}`).join("+")
+    const formulaValue = `${clBilledAmount}${i}/(${clPowers})`
+    const formula = `=IFERROR(IF(${formulaValue} > 0; ${formulaValue}; 0); "")`;
+    sheet.getRange(i, columnIndex).setFormula(formula);
+  }
+}
+
+function columnToLetter(columnIndex) {
+  let columnLetter = '';
+  while (columnIndex > 0) {
+    let temp = (columnIndex - 1) % 26;
+    columnLetter = String.fromCharCode(temp + 65) + columnLetter;
+    columnIndex = Math.floor((columnIndex - 1) / 26);
+  }
+  return columnLetter;
+}
 
 /**
  * Freezes the specified number of columns in the given Google Sheets sheet.
@@ -113,6 +125,9 @@ function setColumnFormat(sheet, columnIndex, columnType) {
     case "power":
       columnRange.setNumberFormat("#,##0.00\" kWh\"");
       break;
+    case "power_consumption":
+      columnRange.setNumberFormat("#,##0.00000\" €/kWh\"");
+      break;
     case "currency":
       columnRange.setNumberFormat("#,##0.00 €");
       break;
@@ -120,13 +135,19 @@ function setColumnFormat(sheet, columnIndex, columnType) {
       columnRange.setNumberFormat("0.00");
       break;
     case "date":
-      columnRange.setNumberFormat("yyyy-MM-dd");
+        columnRange.setNumberFormat("yyyy-MM-dd");
       break;
     default:
       throw new Error(`Unsupported column type: ${columnType}`);
   }
 
-  SpreadsheetApp.flush();
+  try {
+    SpreadsheetApp.flush();
+  } catch (e) {
+    // when the sheet has been converted to a formatted table,
+    // this fails
+  }
+
 }
 
 /**
@@ -196,13 +217,12 @@ function getColumnIndices(sheet) {
 function createLinks(sheet, noFacturaColumnIndex, pdfFileColumnIndex) {
   const data = sheet.getDataRange().getValues();
   for (let i = 2; i <= data.length; i++) {
+    const noFactura = sheet.getRange(i, noFacturaColumnIndex).getValue();
     const fileName = sheet.getRange(i, pdfFileColumnIndex).getValue();
     const files = DriveApp.getFilesByName(fileName);
     if (files.hasNext()) {
-      const file = files.next();
-      const url = file.getUrl();
-      const name = file.getName();
-      sheet.getRange(i, noFacturaColumnIndex).setFormula(`=HYPERLINK("${url}"; "${name}")`);
+      const url = files.next().getUrl();
+      sheet.getRange(i, noFacturaColumnIndex).setFormula(`=HYPERLINK("${url}"; "${noFactura}")`);
     } else {
       Logger.log("No file found with the name: " + fileName);
     }
@@ -215,46 +235,46 @@ function createLinks(sheet, noFacturaColumnIndex, pdfFileColumnIndex) {
  * NOT USED
  *
  */
-function addNoteToColumn() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  const column = 3; // Column C (1 = A, 2 = B, 3 = C)
-  const numRows = sheet.getMaxRows();
+// function addNoteToColumn() {
+//   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+//   const column = 3; // Column C (1 = A, 2 = B, 3 = C)
+//   const numRows = sheet.getMaxRows();
 
-  const range = sheet.getRange(1, column, numRows, 1);
+//   const range = sheet.getRange(1, column, numRows, 1);
 
-  // Set the same note for all cells in the column
-  const note = "This is a note for column C.";
-  const notesArray = Array.from({ length: numRows }, () => [note]);
+//   // Set the same note for all cells in the column
+//   const note = "This is a note for column C.";
+//   const notesArray = Array.from({ length: numRows }, () => [note]);
 
-  range.setNotes(notesArray);
-}
+//   range.setNotes(notesArray);
+// }
 
-function highlightPaidRows() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  const numCols = sheet.getLastColumn();
-  const dataRange = sheet.getRange(2, 1, sheet.getLastRow() - 1, numCols); // All rows below header
+// function highlightPaidRows() {
+//   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+//   const numCols = sheet.getLastColumn();
+//   const dataRange = sheet.getRange(2, 1, sheet.getLastRow() - 1, numCols); // All rows below header
 
-  const rule = SpreadsheetApp.newConditionalFormatRule()
-    .whenFormulaSatisfied('=$C2="Paid"')
-    .setBackground("#d9ead3") // Light green
-    .setRanges([dataRange])
-    .build();
+//   const rule = SpreadsheetApp.newConditionalFormatRule()
+//     .whenFormulaSatisfied('=$C2="Paid"')
+//     .setBackground("#d9ead3") // Light green
+//     .setRanges([dataRange])
+//     .build();
 
-  const rules = sheet.getConditionalFormatRules();
-  rules.push(rule);
-  sheet.setConditionalFormatRules(rules);
-}
+//   const rules = sheet.getConditionalFormatRules();
+//   rules.push(rule);
+//   sheet.setConditionalFormatRules(rules);
+// }
 
 
-function addNumberValidation() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Sheet1");
-  const range = sheet.getRange("C2:C");
+// function addNumberValidation() {
+//   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Sheet1");
+//   const range = sheet.getRange("C2:C");
 
-  const rule = SpreadsheetApp.newDataValidation()
-    .requireNumber()
-    .setAllowInvalid(false)
-    .build();
+//   const rule = SpreadsheetApp.newDataValidation()
+//     .requireNumber()
+//     .setAllowInvalid(false)
+//     .build();
 
-  range.setDataValidation(rule);
-}
+//   range.setDataValidation(rule);
+// }
 
