@@ -24,6 +24,9 @@ function formatAllSheets() {
 
     // get a map of column indices
     const columnIndices = getColumnIndices(sheet)
+    const powerIndices = ["P1", "P2", "P3", "P4", "P5", "P6"].map(p => columnIndices[p]);
+
+    resetAllCharts(sheet)
 
     // Setting format in order to allow for calculations
     setColumnFormat(sheet, columnIndices["Fecha de factura"], "date");
@@ -41,10 +44,10 @@ function formatAllSheets() {
     setColumnFormat(sheet, columnIndices["P6"], "power");
 
     // calculate the kWh average price
-    const powerIndices = ["P1", "P2", "P3", "P4", "P5", "P6"].map(p => columnIndices[p]);
     const averagePrice = "€/kWh"
     createAveragePriceColumn(sheet, columnIndices["Energía"], powerIndices, columnIndices[averagePrice] , averagePrice)
     setColumnFormat(sheet, columnIndices[averagePrice], "power_consumption");
+
 
     createLinks(sheet, columnIndices["Nº de factura"], columnIndices["Fichero"])
 
@@ -64,11 +67,113 @@ function formatAllSheets() {
         hideColumn(sheet, columnIndices[columnName])
       }
     });
+
+    createBilledAmountChart(sheet, columnIndices["Inicio del periodo"], columnIndices["Importe facturado"])
+    createPowerDistributionChart(sheet, columnIndices["Inicio del periodo"], powerIndices)
   });
 }
 
-function createAveragePriceColumn(sheet, billedAmountColumnIndex, powerColumnIndices, columnIndex, columnName) {
-  if (billedAmountColumnIndex === -1 || powerColumnIndices.some(i => i === -1)) {
+/**
+ * Creates and inserts a column chart in the given Google Sheets sheet, visualizing billed amounts per billing period.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet where the chart will be inserted.
+ * @param {number} ciBillingPeriodStart - The column index (1-based) for the billing period start data.
+ * @param {number} ciBilledAmount - The column index (1-based) for the billed amount data.
+ *
+ * @returns {void}
+ */
+function createBilledAmountChart(sheet, ciBillingPeriodStart, ciBilledAmount) {
+  const clDomain = index2Letter(ciBillingPeriodStart)
+  const clData = index2Letter(ciBilledAmount)
+
+  const numRows = sheet.getLastRow();
+  const domainRange = sheet.getRange(`${clDomain}1:${clDomain}${numRows}`); // skip headers
+  const dataRange = sheet.getRange(`${clData}1:${clData}${numRows}`);
+
+  const chart = sheet.newChart()
+    .setChartType(Charts.ChartType.COLUMN)
+    .addRange(domainRange)
+    .addRange(dataRange)
+    .setPosition(5, 4, 0, 0)
+    .setNumHeaders(1)
+    .setOption('isStacked', true)
+    .setOption('title', 'Importe facturado')
+    .setOption('legend.position', 'bottom')
+    .setOption('hAxis.showTextEvery', 1)
+    .build();
+
+  sheet.insertChart(chart);
+}
+
+/**
+ * Creates and inserts a stacked column chart displaying monthly power consumption
+ * into the given Google Sheets sheet.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet where the chart will be inserted.
+ * @param {number} ciBillingPeriodStart - The column index for the billing period start (domain axis).
+ * @param {number[]} powerIndices - Array of column indices representing power data series.
+ */
+function createPowerDistributionChart(sheet, ciBillingPeriodStart, powerIndices) {
+  const clDomain = index2Letter(ciBillingPeriodStart)
+  const clDataStart = index2Letter(powerIndices[0])
+  const clDataEnd = index2Letter(powerIndices[powerIndices.length-1])
+
+  const numRows = sheet.getLastRow();
+  const domainRange = sheet.getRange(`${clDomain}1:${clDomain}${numRows}`); // skip headers
+  const dataRange = sheet.getRange(`${clDataStart}1:${clDataEnd}${numRows}`);
+
+  const chart = sheet.newChart()
+    .setChartType(Charts.ChartType.COLUMN)
+    .addRange(domainRange)
+    .addRange(dataRange)
+    .setPosition(6, 5, 0, 0)
+    .setNumHeaders(1)
+    .setOption('isStacked', true)
+    .setOption('title', 'Consumo Mensual')
+    .setOption('legend.position', 'bottom')
+    .setOption('hAxis.showTextEvery', 1)
+    .build();
+
+  sheet.insertChart(chart);
+}
+
+/**
+ * Removes all charts from the given Google Sheets sheet, except for sheets named "Hoja 1".
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet from which to remove all charts.
+ * @returns {void|null} Returns null if there are no charts to remove; otherwise, returns nothing.
+ */
+function resetAllCharts(sheet) {
+  if (sheet.getName() in ["Hoja 1"]) {
+    return
+  }
+
+  const charts = sheet.getCharts();
+  if (charts.length === 0) {
+    return null;
+  }
+
+  for (const i in charts) {
+    sheet.removeChart(charts[i]);
+  }
+
+}
+
+
+/**
+ * Adds a new column to the given sheet that calculates the average price based
+ * on the billed amount and power columns. It gives a idea of the price of the
+ * kWh independeantly from the price in any specific time period
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet to which the average price column will be added.
+ * @param {number} ciBilledAmount - The column index of the 'Importe facturado' (billed amount) column (1-based).
+ * @param {number[]} powerColumnIndices - An array of column indices (1-based) for the power columns (P1 to P5).
+ * @param {number} columnIndex - The column index (1-based) where the new column should be inserted. If undefined or -1, the column is added at the end.
+ * @param {string} columnName - The name of the new column to be added as a header.
+ * @throws {Error} If any required column index is not found.
+ */
+function createAveragePriceColumn(sheet, ciBilledAmount, powerColumnIndices, columnIndex, columnName) {
+  if (ciBilledAmount === -1 || powerColumnIndices.some(i => i === -1)) {
     throw new Error("One or more required columns ('Importe facturado', P1 to P5) not found.");
   }
 
@@ -80,15 +185,21 @@ function createAveragePriceColumn(sheet, billedAmountColumnIndex, powerColumnInd
 
   // Calculate the average...
   for (let i = 2; i <= sheet.getLastRow(); i++) { // skip headers
-    const clBilledAmount = columnToLetter(billedAmountColumnIndex)
-    const clPowers = powerColumnIndices.map(c => `${columnToLetter(c)}${i}`).join("+")
+    const clBilledAmount = index2Letter(ciBilledAmount)
+    const clPowers = powerColumnIndices.map(c => `${index2Letter(c)}${i}`).join("+")
     const formulaValue = `${clBilledAmount}${i}/(${clPowers})`
     const formula = `=IFERROR(IF(${formulaValue} > 0; ${formulaValue}; 0); "")`;
     sheet.getRange(i, columnIndex).setFormula(formula);
   }
 }
 
-function columnToLetter(columnIndex) {
+/**
+ * Converts a 1-based column index to its corresponding Excel-style column letter(s).
+ *
+ * @param {number} columnIndex - The 1-based index of the column (e.g., 1 for 'A', 27 for 'AA').
+ * @returns {string} The column letter(s) corresponding to the given index.
+ */
+function index2Letter(columnIndex) {
   let columnLetter = '';
   while (columnIndex > 0) {
     let temp = (columnIndex - 1) % 26;
@@ -211,18 +322,18 @@ function getColumnIndices(sheet) {
  * and inserting a HYPERLINK formula in the specified column.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet where links will be created.
- * @param {number} noFacturaColumnIndex - The column index where the hyperlink will be set (1-based).
- * @param {number} pdfFileColumnIndex - The column index containing the PDF file names (1-based).
+ * @param {number} ciBillId - The column index where the hyperlink will be set (1-based).
+ * @param {number} ciPdfFile - The column index containing the PDF file names (1-based).
  */
-function createLinks(sheet, noFacturaColumnIndex, pdfFileColumnIndex) {
+function createLinks(sheet, ciBillId, ciPdfFile) {
   const data = sheet.getDataRange().getValues();
   for (let i = 2; i <= data.length; i++) {
-    const noFactura = sheet.getRange(i, noFacturaColumnIndex).getValue();
-    const fileName = sheet.getRange(i, pdfFileColumnIndex).getValue();
+    const noFactura = sheet.getRange(i, ciBillId).getValue();
+    const fileName = sheet.getRange(i, ciPdfFile).getValue();
     const files = DriveApp.getFilesByName(fileName);
     if (files.hasNext()) {
       const url = files.next().getUrl();
-      sheet.getRange(i, noFacturaColumnIndex).setFormula(`=HYPERLINK("${url}"; "${noFactura}")`);
+      sheet.getRange(i, ciBillId).setFormula(`=HYPERLINK("${url}"; "${noFactura}")`);
     } else {
       Logger.log("No file found with the name: " + fileName);
     }
@@ -235,46 +346,46 @@ function createLinks(sheet, noFacturaColumnIndex, pdfFileColumnIndex) {
  * NOT USED
  *
  */
-// function addNoteToColumn() {
-//   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-//   const column = 3; // Column C (1 = A, 2 = B, 3 = C)
-//   const numRows = sheet.getMaxRows();
+function addNoteToColumn() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const column = 3; // Column C (1 = A, 2 = B, 3 = C)
+  const numRows = sheet.getMaxRows();
 
-//   const range = sheet.getRange(1, column, numRows, 1);
+  const range = sheet.getRange(1, column, numRows, 1);
 
-//   // Set the same note for all cells in the column
-//   const note = "This is a note for column C.";
-//   const notesArray = Array.from({ length: numRows }, () => [note]);
+  // Set the same note for all cells in the column
+  const note = "This is a note for column C.";
+  const notesArray = Array.from({ length: numRows }, () => [note]);
 
-//   range.setNotes(notesArray);
-// }
+  range.setNotes(notesArray);
+}
 
-// function highlightPaidRows() {
-//   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-//   const numCols = sheet.getLastColumn();
-//   const dataRange = sheet.getRange(2, 1, sheet.getLastRow() - 1, numCols); // All rows below header
+function highlightPaidRows() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const numCols = sheet.getLastColumn();
+  const dataRange = sheet.getRange(2, 1, sheet.getLastRow() - 1, numCols); // All rows below header
 
-//   const rule = SpreadsheetApp.newConditionalFormatRule()
-//     .whenFormulaSatisfied('=$C2="Paid"')
-//     .setBackground("#d9ead3") // Light green
-//     .setRanges([dataRange])
-//     .build();
+  const rule = SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied('=$C2="Paid"')
+    .setBackground("#d9ead3") // Light green
+    .setRanges([dataRange])
+    .build();
 
-//   const rules = sheet.getConditionalFormatRules();
-//   rules.push(rule);
-//   sheet.setConditionalFormatRules(rules);
-// }
+  const rules = sheet.getConditionalFormatRules();
+  rules.push(rule);
+  sheet.setConditionalFormatRules(rules);
+}
 
 
-// function addNumberValidation() {
-//   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Sheet1");
-//   const range = sheet.getRange("C2:C");
+function addNumberValidation() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Sheet1");
+  const range = sheet.getRange("C2:C");
 
-//   const rule = SpreadsheetApp.newDataValidation()
-//     .requireNumber()
-//     .setAllowInvalid(false)
-//     .build();
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireNumber()
+    .setAllowInvalid(false)
+    .build();
 
-//   range.setDataValidation(rule);
-// }
+  range.setDataValidation(rule);
+}
 
