@@ -16,6 +16,7 @@ try:
     from datetime import datetime
     from dotenv import load_dotenv
     from openpyxl import Workbook
+    from openpyxl.workbook.defined_name import DefinedName
     from os.path import basename
     from pprint import pprint
 except ModuleNotFoundError as e:
@@ -33,35 +34,114 @@ ENDESA_PV_PATTERN = re.compile(r".*(Punta|Llano|Valle)( (?:\d{1,3}(?:\.\d{3})*|\
 # i.e.: Px 7.994 7.994 0 66 66 0 0,00 0,00 0,00
 TOTAL_PV_PATTERN = re.compile(r"^(P[123456])( (?:\d{1,3}(?:\.\d{3})*|\d+)(,\d{2})?){3}( (?:\d{1,3}(?:\.\d{3})*|\d+)(,\d{2})?){6}")
 
-def _extract_billed_amount(data:dict, key:str) -> str:
-    billed_amount = AMOUNT_PATTERN.findall( data[key])
-    if len(billed_amount) != 1:
-        return None
-    return billed_amount[0]
+def main():
+    with open(os.path.join(os.path.dirname(__file__), 'defaults.yaml'), 'r', encoding='utf-8') as f:
+        defaults = yaml.safe_load(f)
+    args = parse_command_line(defaults)
+    args.defaults = defaults
+    try:
+        # locale.setlocale(locale.LC_TIME, 'Spanish_Spain.1252')  # On Windows
+        locale.setlocale(locale.LC_NUMERIC, args.input_locale)
+        locale.setlocale(locale.LC_TIME, args.input_locale)
+        for verbose_package in ['pdfminer.pdfpage']:
+            verbose_logger = logging.getLogger(verbose_package)
+            verbose_logger.setLevel(level=logging.ERROR)
+        if args.debug:
+            coloredlogs.install(level=logging.DEBUG, logger=logger)
+        elif args.quiet:
+            coloredlogs.install(level=logging.ERROR, logger=logger)
+        else:
+            coloredlogs.install(level=logging.INFO, logger=logger)
+        return args.func(args)
+    except Exception as e:
+        logging.error(e, exc_info=True)
+        return 1
 
 
-def _get_default_bill_info():
-    return {
-        'is_ours': False,
-        'bill_id': None,
-        'billing_date': None,
-        'billing_period': None,
-        'billed_power_capacity': None,
-        'billed_energy_consumed': None,
-        'billed_amount_0': None,
-        'billed_amount_1': None,
-        'is_rectification': False,
-        # 'P1': None,
-        # 'P2': None,
-        # 'P3': None,
-        # 'P4': None,
-        # 'P5': None,
-        # 'P6': None,
-        'cups': None,
-    }
+def parse_command_line(defaults):
+    parser = ArgumentParser(prog='extract_bill_information',
+                            description=__doc__, formatter_class=RawTextHelpFormatter)
+    parser.add_argument(
+        '--debug', action="store_true", help='Run the program in debug', required=False, default=False)
+    parser.add_argument(
+        '--quiet', action="store_true", help='Run the program in quiet mode', required=False, default=False)
+    parser.add_argument(
+        '--input-dir', help=f"The path where the bills are located. By default '{defaults['input-dir']}'.", required=False, default=defaults['input-dir'])
+    parser.add_argument(
+        '--input-locale', help=f"The locale to use when reading the bills", required=False, default=defaults['input-locale'])
+    parser.add_argument(
+        '--output', help=f"The name of the report.", required=False, default=defaults['output'])
+    parser.add_argument(
+        '--limit', type=int, help=f"Limit the number of ticket to download. By default '{defaults['limit']}' (-1 is no limit).", required=False, default=defaults['limit'])
+    parser.set_defaults(func=extract_bill_information)
+    return parser.parse_args()
+
+
+def extract_bill_information(args):
+    """
+    Extracts and processes bill information from PDF files in a specified input directory.
+
+    This function scans the given input directory for PDF files, extracts bill information using
+    a dispatcher, sanitizes the extracted data, and organizes it by CUPS and bill ID. It also
+    supports limiting the number of files processed and generates a final bill report.
+
+    Args:
+        args: An object containing the following attributes:
+            - input_dir (str): Path to the directory containing PDF files.
+            - defaults (dict): Default configuration, including 'dispatchers' for extraction.
+            - limit (int): Maximum number of files to process. If 0 or less, all files are processed.
+
+    Returns:
+        int: 1 if an error occurs (e.g., input directory does not exist or no files found), otherwise None.
+    """
+    if not os.path.isdir(args.input_dir):
+        logger.error(f"Input directory '{args.input_dir}' does not exist.")
+        return 1
+    logger.info(f"Reading files from '{args.input_dir}' ...")
+    files = [os.path.join(dp, f) for dp, dn, filenames in os.walk(args.input_dir) for f in filenames if f.lower().endswith('.pdf')]
+    if not files:
+        logger.error(f"No files found in '{args.input_dir}'.")
+        return 1
+    logger.debug(f"Found {len(files)} files in '{args.input_dir}'.")
+    if args.limit > 0:
+        files = files[:args.limit]
+        logger.warning(f"Limiting to {len(files)} files as per the --limit argument.")
+
+    bills = {}
+    for file in files:
+        bill_info = extract_dispatcher(args.defaults['dispatchers'], file)
+        if not bill_info:
+            continue
+        bill_info = sanitize_bill(bill_info)
+        if not bill_info:
+            continue
+        bill_info['file'] = basename(file)
+        cups = bill_info['cups']
+        bill_id = bill_info['bill_id']
+        if cups not in bills:
+            bills[cups] = {}
+        bills[cups][bill_id] = bill_info
+
+    generate_bill_report(args, bills)
 
 
 def extract_dispatcher(dispatchers:dict, file:str):
+    """
+    Extracts bill information by selecting and invoking the
+    appropriate extractor function based on the content of
+    the first page of a PDF bill.
+
+    Args:
+        dispatchers (dict): A dictionary mapping dispatcher names (str) to extractor function names (str).
+        file (str): The path to the PDF file to be processed.
+
+    Returns:
+        Any: The result of the extractor function if a matching dispatcher is found; otherwise, None.
+
+    Raises:
+        ValueError: If the specified extractor function is not found or is not callable.
+
+    """
     logger.info(f"Extracting information from bill '{file}' ...")
     with pdfplumber.open(file) as pdf:
         first_page = pdf.pages[0].extract_text()
@@ -78,8 +158,7 @@ def extract_dispatcher(dispatchers:dict, file:str):
 
 
 def extract_nufri_bill(file, pdf):
-    bill_info = _get_default_bill_info()
-    return bill_info
+    return None
 
 
 def _extract_total_power(line:str) -> str:
@@ -217,16 +296,32 @@ def extract_endesa_bill(file, pdf):
     return bill_info
 
 
-def is_bill_sane(data:dict):
-    # check that all the keys have a value
-    is_sane = True
-    missing_keys = []
-    for key, value in data.items():
-        if value is None or (isinstance(value, str) and not value.strip()):
-            missing_keys.append(key)
-            is_sane = False
-    return is_sane, missing_keys
+def _extract_billed_amount(data:dict, key:str) -> str:
+    billed_amount = AMOUNT_PATTERN.findall( data[key])
+    if len(billed_amount) != 1:
+        return None
+    return billed_amount[0]
 
+
+def _get_default_bill_info():
+    return {
+        'is_ours': False,
+        'bill_id': None,
+        'billing_date': None,
+        'billing_period': None,
+        'billed_power_capacity': None,
+        'billed_energy_consumed': None,
+        'billed_amount_0': None,
+        'billed_amount_1': None,
+        'is_rectification': False,
+        # 'P1': None,
+        # 'P2': None,
+        # 'P3': None,
+        # 'P4': None,
+        # 'P5': None,
+        # 'P6': None,
+        'cups': None,
+    }
 
 def sanitize_bill(data:dict):
     """
@@ -292,12 +387,46 @@ def sanitize_bill(data:dict):
     return data
 
 
+def is_bill_sane(data:dict):
+    # check that all the keys have a value
+    is_sane = True
+    missing_keys = []
+    for key, value in data.items():
+        if value is None or (isinstance(value, str) and not value.strip()):
+            missing_keys.append(key)
+            is_sane = False
+    return is_sane, missing_keys
+
+
 def generate_bill_report(args, bills:dict):
+    """
+    Generates an Excel workbook report from provided bill information.
+
+    For each CUPS (supply point) in the `bills` dictionary, a worksheet is created and populated
+    with bill data. The worksheet names and column headers are determined by the `args.defaults`
+    configuration. The resulting workbook is saved to the file path specified by `args.output`.
+
+    Args:
+        args: An object containing configuration options, including:
+            - defaults['column_labels']: A dictionary mapping column keys to their display labels.
+            - defaults['sheet_names']: A dictionary mapping CUPS to worksheet names.
+            - output: The file path where the Excel workbook will be saved.
+        bills (dict): A dictionary where each key is a CUPS identifier and each value is another
+            dictionary containing bill information for that CUPS.
+
+    Returns:
+        None. The function saves the generated Excel workbook to the specified output file.
+    """
     wb = Workbook()
 
     column_keys = list(args.defaults['column_labels'].keys())
     column_headers = list(args.defaults['column_labels'].values())
     sheet_names = args.defaults['sheet_names']
+
+    ws = wb.active
+    ws.title = "Simulación"
+    ws.append(["-", "P1", "P2", "P3", "P4", "P5", "P6"])
+    ws.append(["Precio €/kWh", 0.211228, 0.182515,	0.15511, 0.133022, 0.114903, 0.126166])
 
     sheets = {}
     # Add a new worksheet
@@ -314,89 +443,13 @@ def generate_bill_report(args, bills:dict):
                 is_first_row = False
             ws.append([ bill_info.get(h, None) for h in column_keys ])
 
-    ordered_sheets = []
+    ordered_sheets = [ wb.worksheets[0] ]
     for title in args.defaults['sheet_names'].values():
         ordered_sheets.append(sheets[title])
     wb._sheets = ordered_sheets
 
     # Save the workbook
     wb.save(args.output)
-
-
-def extract_bill_information(args):
-    # Recursively list all files found in the args.input_dir
-    if not os.path.isdir(args.input_dir):
-        logger.error(f"Input directory '{args.input_dir}' does not exist.")
-        return 1
-    logger.info(f"Reading files from '{args.input_dir}' ...")
-    files = [os.path.join(dp, f) for dp, dn, filenames in os.walk(args.input_dir) for f in filenames if f.lower().endswith('.pdf')]
-    if not files:
-        logger.error(f"No files found in '{args.input_dir}'.")
-        return 1
-    logger.debug(f"Found {len(files)} files in '{args.input_dir}'.")
-    if args.limit > 0:
-        files = files[:args.limit]
-        logger.warning(f"Limiting to {len(files)} files as per the --limit argument.")
-
-    bills = {}
-    for file in files:
-        bill_info = extract_dispatcher(args.defaults['dispatchers'], file)
-        if not bill_info:
-            continue
-        bill_info = sanitize_bill(bill_info)
-        if not bill_info:
-            continue
-        bill_info['file'] = basename(file)
-        cups = bill_info['cups']
-        bill_id = bill_info['bill_id']
-        if cups not in bills:
-            bills[cups] = {}
-        bills[cups][bill_id] = bill_info
-
-    generate_bill_report(args, bills)
-
-def parse_command_line(defaults):
-    parser = ArgumentParser(prog='extract_bill_information',
-                            description=__doc__, formatter_class=RawTextHelpFormatter)
-    parser.add_argument(
-        '--debug', action="store_true", help='Run the program in debug', required=False, default=False)
-    parser.add_argument(
-        '--quiet', action="store_true", help='Run the program in quiet mode', required=False, default=False)
-    parser.add_argument(
-        '--input-dir', help=f"The path where the bills are located. By default '{defaults['input-dir']}'.", required=False, default=defaults['input-dir'])
-    parser.add_argument(
-        '--input-locale', help=f"The locale to use when reading the bills", required=False, default=defaults['input-locale'])
-    parser.add_argument(
-        '--output', help=f"The name of the report.", required=False, default=defaults['output'])
-    parser.add_argument(
-        '--limit', type=int, help=f"Limit the number of ticket to download. By default '{defaults['limit']}' (-1 is no limit).", required=False, default=defaults['limit'])
-    parser.set_defaults(func=extract_bill_information)
-    return parser.parse_args()
-
-
-def main():
-    with open(os.path.join(os.path.dirname(__file__), 'defaults.yaml'), 'r', encoding='utf-8') as f:
-        defaults = yaml.safe_load(f)
-    args = parse_command_line(defaults)
-    args.defaults = defaults
-    try:
-        # locale.setlocale(locale.LC_TIME, 'Spanish_Spain.1252')  # On Windows
-        locale.setlocale(locale.LC_NUMERIC, args.input_locale)
-        locale.setlocale(locale.LC_TIME, args.input_locale)
-        for verbose_package in ['pdfminer.pdfpage']:
-            verbose_logger = logging.getLogger(verbose_package)
-            verbose_logger.setLevel(level=logging.ERROR)
-        if args.debug:
-            coloredlogs.install(level=logging.DEBUG, logger=logger)
-        elif args.quiet:
-            coloredlogs.install(level=logging.ERROR, logger=logger)
-        else:
-            coloredlogs.install(level=logging.INFO, logger=logger)
-        return args.func(args)
-    except Exception as e:
-        logging.error(e, exc_info=True)
-        return 1
-
 
 if __name__ == '__main__':
     sys.exit(main())
