@@ -194,4 +194,4 @@ cython_debug/
 .cursorindexingignore
 
 bills
-bills.xlsx
+*.xlsx

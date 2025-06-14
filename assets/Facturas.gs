@@ -25,6 +25,15 @@ function formatAllSheets() {
       addNamedRange(spreadsheet, sheet, 'SimulatedPriceP4', 'E')
       addNamedRange(spreadsheet, sheet, 'SimulatedPriceP5', 'F')
       addNamedRange(spreadsheet, sheet, 'SimulatedPriceP6', 'G')
+
+      const columnIndices = getColumnIndices(sheet)
+      setColumnFormat(sheet, columnIndices["P1"], "power_consumption");
+      setColumnFormat(sheet, columnIndices["P2"], "power_consumption");
+      setColumnFormat(sheet, columnIndices["P3"], "power_consumption");
+      setColumnFormat(sheet, columnIndices["P4"], "power_consumption");
+      setColumnFormat(sheet, columnIndices["P5"], "power_consumption");
+      setColumnFormat(sheet, columnIndices["P6"], "power_consumption");
+
     } else {
       const lastRow = sheet.getLastRow();
       if (lastRow === 0) return; // Skip empty sheets
@@ -87,7 +96,6 @@ function formatAllSheets() {
   });
 }
 
-
 /**
  * Returns a mapping of column header names to their 1-based column indices for the given sheet.
  *
@@ -125,7 +133,7 @@ function setColumnFormat(sheet, columnIndex, columnType) {
       columnRange.setNumberFormat("#,##0.00\" kWh\"");
       break;
     case "power_consumption":
-      columnRange.setNumberFormat("#,##0.00000\" €/kWh\"");
+      columnRange.setNumberFormat("#,##0.000000\" €/kWh\"");
       break;
     case "currency":
       columnRange.setNumberFormat("#,##0.00 €");
@@ -150,14 +158,6 @@ function setColumnFormat(sheet, columnIndex, columnType) {
 }
 
 
-/**
- * Adds a named range to the given spreadsheet if it does not already exist.
- *
- * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} spreadsheet - The spreadsheet to add the named range to.
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet containing the range.
- * @param {string} rangeName - The name to assign to the range.
- * @param {string} columnLetter - The column letter (e.g., "A", "B") for the range starting at row 2.
- */
 function addNamedRange(spreadsheet, sheet, rangeName, columnLetter) {
   if (spreadsheet.getRangeByName(rangeName) === null) {
     const range = sheet.getRange(`${sheet.getName()}!${columnLetter}2`);
@@ -199,18 +199,6 @@ function createAveragePriceColumn(sheet, ciBilledAmount, powerColumnIndices, col
   }
 }
 
-
-/**
- * Adds a new column to the given sheet that calculates the simulated energy cost
- * based on provided power column indices and simulated price named range
- * (SimulatedPriceP1 to SimulatedPriceP6).
- *
- * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet to modify.
- * @param {number[]} powerColumnIndices - Array of column indices for power values (P1 to P6).
- * @param {number} columnIndex - The index at which to insert the new calculated column. If undefined or -1, appends to the end.
- * @param {string} columnName - The header name for the new calculated column.
- * @throws {Error} If any of the required power columns (P1 to P6) are not found.
- */
 function createSimulatedEnergyColumn(sheet, powerColumnIndices, columnIndex, columnName) {
   if (powerColumnIndices.some(i => i === -1)) {
     throw new Error("One or more required columns (P1 to P6) not found.");
@@ -234,6 +222,7 @@ function createSimulatedEnergyColumn(sheet, powerColumnIndices, columnIndex, col
 }
 
 
+
 /**
  * Converts a 1-based column index to its corresponding Excel-style column letter(s).
  *
@@ -250,7 +239,6 @@ function index2Letter(columnIndex) {
   return columnLetter;
 }
 
-
 /**
  * Freezes the specified number of columns in the given Google Sheets sheet.
  *
@@ -260,7 +248,6 @@ function index2Letter(columnIndex) {
 function freezeColumn(sheet, columnIndex) {
   sheet.setFrozenColumns(columnIndex);
 }
-
 
 /**
  * Hides a specific column in the given Google Sheets sheet.
@@ -272,7 +259,6 @@ function hideColumn(sheet, columnIndex) {
   const range = sheet.getRange(1, columnIndex);
   sheet.hideColumn(range);
 }
-
 
 /**
  * Checks if a specified column in a Google Sheets sheet is empty (excluding the header row).
@@ -287,7 +273,6 @@ function isColumnEmpty(sheet, columnIndex) {
   const values = sheet.getRange(2, columnIndex, lastRow - 1).getValues(); // Exclude header
   return values.every(row => row[0] === "" || row[0] === null);
 }
-
 
 /**
  * Sorts the data in a given Google Sheets sheet by a specified column.
@@ -307,7 +292,6 @@ function sortByColumn(sheet, columnIndex, ascending = true) {
   const dataRange = sheet.getRange(2, 1, lastRow - 1, lastCol);
   dataRange.sort({ column: columnIndex, ascending });
 }
-
 
 /**
  * Creates hyperlinks in a Google Sheet by searching for PDF files in Google Drive
@@ -423,3 +407,4 @@ function createPowerDistributionChart(sheet, ciBillingPeriodStart, powerIndices)
 
   sheet.insertChart(chart);
 }
+

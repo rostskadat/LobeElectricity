@@ -1,8 +1,9 @@
-# input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Comunidad/Electricidad/New contract - TotalEnergies
-# input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Contrato Electricidad
-input-dir: bills
+# input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Comunidad/Electricidad
+input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Contrato Electricidad
+# input-dir: bills
 input-locale: es_ES.utf8
-output: bills.xlsx
+# output: bills-comunidad.xlsx
+output: bills-E74A.xlsx
 limit: -1
 # Detect the emissor of the bill, and extract accordingly
 dispatchers:
@@ -36,3 +37,7 @@ sheet_names:
   ES0031300855147001KH0F: ACS - 01KH0F
   ES0031300855143010DY0F: GARAJE - 10DY0F
   ES0031300855147011EM0F: INCENDIOS - 11EM0F
+  # ES0031300855146007RJ0F: E7 - 4A
+tariffs:
+  TotalEnergie: [0.211228, 0.182515, 0.15511, 0.133022, 0.114903, 0.126166]
+  Cye Energia: [0.199190, 0.172698, 0.142268, 0.122255, 0.109741, 0.115186]
