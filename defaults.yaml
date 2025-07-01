@@ -1,17 +1,27 @@
-# input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Comunidad/Electricidad
-input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Contrato Electricidad
-# input-dir: bills
-input-locale: es_ES.utf8
-# output: bills-comunidad.xlsx
-output: bills-E74A.xlsx
+bill-input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Comunidad/Electricidad
+output: bills-Comunidad.xlsx
+# bill-input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Contrato Electricidad
+# output: bills-E74A.xlsx
+# bill-input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/CONDES DE ARAGÓN 36 ZARAGOZA/Facturas/Endesa
+# output: bills-CondesDeAragon36.xlsx
+load-input-dir: consumption
+
+include-loads: true
+locale: es_ES.utf8
 limit: -1
 # Detect the emissor of the bill, and extract accordingly
 dispatchers:
   "Energia Nufri S.L.U.": extract_nufri_bill
   "A81948077": extract_endesa_bill
   "A87803862": extract_total_bill
-
-# BEWARE: the order is the one below
+# Our bills
+ours:
+  - CAMPANILLA
+  - CONDES DE ARAGON 36
+# The localized column label. The key corresponds to the dict key while the value
+#   is the label used in the Excel sheet
+# BEWARE: The columns in the Excel sheet will be in the same order as the keys
+#   in the dict below.
 column_labels:
   bill_id: Nº de factura
   billing_date: Fecha de factura
@@ -29,6 +39,10 @@ column_labels:
   P5: P5
   P6: P6
   file: Fichero
+# The localized worksheet label. Each worksheet corresponds to a specific
+#   CUPS. The worksheet will be ordered in the order of the dict below.
+#   Each worksheet will then have a friendly name equals to the value
+#   corresponding to the dict key
 sheet_names:
   ES0031300855143009DM0F: E5 - 09DM0F
   ES0031300855145010GM0F: E6 - 10GM0F
@@ -38,6 +52,152 @@ sheet_names:
   ES0031300855143010DY0F: GARAJE - 10DY0F
   ES0031300855147011EM0F: INCENDIOS - 11EM0F
   # ES0031300855146007RJ0F: E7 - 4A
+  # ES0031300855700019PR0F: E36.1 - 4B
+# These are the tariffs that We want to appear on the Simulacion sheet.
+# Note that the Simulacion sheet will always appear on the first page.
+# Each key must be a 6-float array, for P1 to P6 energy cost.
 tariffs:
-  TotalEnergie: [0.211228, 0.182515, 0.15511, 0.133022, 0.114903, 0.126166]
-  Cye Energia: [0.199190, 0.172698, 0.142268, 0.122255, 0.109741, 0.115186]
+  TE 3.0: [0.211228, 0.182515, 0.15511, 0.133022, 0.114903, 0.126166]
+  TE 2.0: [0.230642, 0.159753, 0.125822, 0, 0, 0]
+  Cye Energia 3.0: [0.199190, 0.172698, 0.142268, 0.122255, 0.109741, 0.115186]
+  Energia Nufri 2.0: [0.133920, 0.133920, 0.133920, 00, 0, 0]
+loads:
+  TD2.0:
+    default: "P3"
+    normal:
+      months: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+      hours:
+        1: "P3"
+        2: "P3"
+        3: "P3"
+        4: "P3"
+        5: "P3"
+        6: "P3"
+        7: "P3"
+        8: "P3"
+        9: "P2"
+        10: "P2"
+        11: "P1"
+        12: "P1"
+        13: "P1"
+        14: "P1"
+        15: "P2"
+        16: "P2"
+        17: "P2"
+        18: "P2"
+        19: "P1"
+        20: "P1"
+        21: "P1"
+        22: "P1"
+        23: "P2"
+        24: "P2"
+  TD3.0:
+    default: "P6"
+    high:
+      months: [1, 2, 7, 12]
+      hours:
+        1: "P6"
+        2: "P6"
+        3: "P6"
+        4: "P6"
+        5: "P6"
+        6: "P6"
+        7: "P6"
+        8: "P6"
+        9: "P2"
+        10: "P1"
+        11: "P1"
+        12: "P1"
+        13: "P1"
+        14: "P1"
+        15: "P2"
+        16: "P2"
+        17: "P2"
+        18: "P2"
+        19: "P1"
+        20: "P1"
+        21: "P1"
+        22: "P1"
+        23: "P2"
+        24: "P2"
+    medium-high:
+      months: [3, 11]
+      hours:
+        1: "P6"
+        2: "P6"
+        3: "P6"
+        4: "P6"
+        5: "P6"
+        6: "P6"
+        7: "P6"
+        8: "P6"
+        9: "P3"
+        10: "P2"
+        11: "P2"
+        12: "P2"
+        13: "P2"
+        14: "P2"
+        15: "P3"
+        16: "P3"
+        17: "P3"
+        18: "P3"
+        19: "P2"
+        20: "P2"
+        21: "P2"
+        22: "P2"
+        23: "P3"
+        24: "P3"
+    medium:
+      months: [6, 8, 9]
+      hours:
+        1: "P6"
+        2: "P6"
+        3: "P6"
+        4: "P6"
+        5: "P6"
+        6: "P6"
+        7: "P6"
+        8: "P6"
+        9: "P4"
+        10: "P3"
+        11: "P3"
+        12: "P3"
+        13: "P3"
+        14: "P3"
+        15: "P4"
+        16: "P4"
+        17: "P4"
+        18: "P4"
+        19: "P3"
+        20: "P3"
+        21: "P3"
+        22: "P3"
+        23: "P4"
+        24: "P4"
+    low:
+      months: [4, 5, 10]
+      hours:
+        1: "P6"
+        2: "P6"
+        3: "P6"
+        4: "P6"
+        5: "P6"
+        6: "P6"
+        7: "P6"
+        8: "P6"
+        9: "P5"
+        10: "P4"
+        11: "P4"
+        12: "P4"
+        13: "P4"
+        14: "P4"
+        15: "P5"
+        16: "P5"
+        17: "P5"
+        18: "P5"
+        19: "P4"
+        20: "P4"
+        21: "P4"
+        22: "P4"
+        23: "P5"
+        24: "P5"

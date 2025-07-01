@@ -5,6 +5,7 @@ Extract bill information from PDF files and generate a report.
 
 try:
     import coloredlogs
+    import csv
     import locale
     import logging
     import os
@@ -43,9 +44,9 @@ def main():
     args.defaults = defaults
     try:
         # locale.setlocale(locale.LC_TIME, 'Spanish_Spain.1252')  # On Windows
-        locale.setlocale(locale.LC_NUMERIC, args.input_locale)
-        locale.setlocale(locale.LC_TIME, args.input_locale)
-        for verbose_package in ['pdfminer.pdfpage']:
+        locale.setlocale(locale.LC_NUMERIC, args.locale)
+        locale.setlocale(locale.LC_TIME, args.locale)
+        for verbose_package in ['pdfminer.pdfpage', 'pdfminer.pdfdocument', 'pdfminer.psparser', 'pdfminer.pdfinterp', 'pdfminer.cmapdb', 'pdfminer.pdfparser']:
             verbose_logger = logging.getLogger(verbose_package)
             verbose_logger.setLevel(level=logging.ERROR)
         if args.debug:
@@ -64,15 +65,19 @@ def parse_command_line(defaults):
     parser = ArgumentParser(prog='extract_bill_information',
                             description=__doc__, formatter_class=RawTextHelpFormatter)
     parser.add_argument(
-        '--debug', action="store_true", help='Run the program in debug', required=False, default=False)
+        '--debug', action="store_true", help="Run the program in debug. Default to 'False'.", required=False, default=False)
     parser.add_argument(
-        '--quiet', action="store_true", help='Run the program in quiet mode', required=False, default=False)
+        '--quiet', action="store_true", help="Run the program in quiet mode. Default to 'False'.", required=False, default=False)
     parser.add_argument(
-        '--input-dir', help=f"The path where the bills are located. By default '{defaults['input-dir']}'.", required=False, default=defaults['input-dir'])
+        '--locale', help=f"The locale to use when reading the bills. By default '{defaults['locale']}'.", required=False, default=defaults['locale'])
     parser.add_argument(
-        '--input-locale', help=f"The locale to use when reading the bills", required=False, default=defaults['input-locale'])
+        '--bill-input-dir', help=f"The path where the bills are located. By default '{defaults['bill-input-dir']}'.", required=False, default=defaults['bill-input-dir'])
     parser.add_argument(
-        '--output', help=f"The name of the report.", required=False, default=defaults['output'])
+        '--include-loads', action="store_true", help=f"Wether to add the load in the output. By default '{defaults['include-loads']}'.", required=False, default=defaults['include-loads'])
+    parser.add_argument(
+        '--load-input-dir', help=f"The path where the laod CSV are located. By default '{defaults['load-input-dir']}'.", required=False, default=defaults['load-input-dir'])
+    parser.add_argument(
+        '--output', help=f"The name of the report. By default '{defaults['output']}'.", required=False, default=defaults['output'])
     parser.add_argument(
         '--limit', type=int, help=f"Limit the number of ticket to download. By default '{defaults['limit']}' (-1 is no limit).", required=False, default=defaults['limit'])
     parser.set_defaults(func=extract_bill_information)
@@ -96,22 +101,39 @@ def extract_bill_information(args):
     Returns:
         int: 1 if an error occurs (e.g., input directory does not exist or no files found), otherwise None.
     """
-    if not os.path.isdir(args.input_dir):
-        logger.error(f"Input directory '{args.input_dir}' does not exist.")
+    if not os.path.isdir(args.bill_input_dir):
+        logger.error(f"Input directory '{args.bill_input_dir}' does not exist.")
         return 1
-    logger.info(f"Reading files from '{args.input_dir}' ...")
-    files = [os.path.join(dp, f) for dp, dn, filenames in os.walk(args.input_dir) for f in filenames if f.lower().endswith('.pdf')]
+    logger.info(f"Reading files from '{args.bill_input_dir}' ...")
+    files = [os.path.join(dp, f) for dp, dn, filenames in os.walk(args.bill_input_dir) for f in filenames if f.lower().endswith('.pdf')]
     if not files:
-        logger.error(f"No files found in '{args.input_dir}'.")
+        logger.error(f"No files found in '{args.bill_input_dir}'.")
         return 1
-    logger.debug(f"Found {len(files)} files in '{args.input_dir}'.")
+    logger.debug(f"Found {len(files)} files in '{args.bill_input_dir}'.")
     if args.limit > 0:
         files = files[:args.limit]
         logger.warning(f"Limiting to {len(files)} files as per the --limit argument.")
 
+    bills = process_bills(args, files)
+
+    loads = {}
+    if args.include_loads:
+        files = [os.path.join(dp, f) for dp, dn, filenames in os.walk(args.load_input_dir) for f in filenames if f.lower().endswith('.csv')]
+        if not files:
+            logger.warning(f"No files found in '{args.load_input_dir}'.")
+        else:
+            logger.debug(f"Found {len(files)} files in '{args.bill_input_dir}'.")
+            if args.limit > 0:
+                files = files[:args.limit]
+                logger.warning(f"Limiting to {len(files)} files as per the --limit argument.")
+            loads = process_loads(args, files)
+
+    generate_bill_report(args, bills, loads)
+
+def process_bills(args, files:list):
     bills = {}
     for file in files:
-        bill_info = extract_dispatcher(args.defaults['dispatchers'], file)
+        bill_info = extract_dispatcher(args.defaults['dispatchers'], file, ours=args.defaults['ours'])
         if not bill_info:
             continue
         bill_info = sanitize_bill(bill_info)
@@ -123,11 +145,46 @@ def extract_bill_information(args):
         if cups not in bills:
             bills[cups] = {}
         bills[cups][bill_id] = bill_info
+    return bills
 
-    generate_bill_report(args, bills)
+
+def process_loads(args, files:list):
+    loads = {}
+    for file in files:
+        with open(file, encoding='utf-8') as f:
+            reader = csv.DictReader(f, delimiter=';')
+            for row in reader:
+                cups = row['CUPS'].strip()
+                fecha = row['Fecha'].strip()
+                hora = row['Hora'].strip()
+                ae_kwh = row['AE_kWh'].strip()
+
+                # Hora starts at 1, while datetime starts at 0
+                dt_str = f"{fecha} {int(hora)-1}"
+                try:
+                    dt = datetime.strptime(dt_str, "%d/%m/%Y %H")
+                except ValueError as e:
+                    logger.error(f"Could not parse datetime '{dt_str}' in file '{file}': {str(e)}")
+                    continue
+
+                # Convert AE_kWh to float
+                try:
+                    if ae_kwh != '':
+                        ae_kwh_val = locale.atof(ae_kwh)
+                    else:
+                        ae_kwh_val = 0.0
+                except ValueError as e:
+                    logger.error(f"Could not parse AE_kWh '{ae_kwh}' in file '{file}'")
+                    continue
+
+                # Insert into loads dict
+                if cups not in loads:
+                    loads[cups] = {}
+                loads[cups][dt] = ae_kwh_val
+    return loads
 
 
-def extract_dispatcher(dispatchers:dict, file:str):
+def extract_dispatcher(dispatchers:dict, file:str, ours:list):
     """
     Extracts bill information by selecting and invoking the
     appropriate extractor function based on the content of
@@ -153,17 +210,18 @@ def extract_dispatcher(dispatchers:dict, file:str):
                 raise ValueError(f"Extractor '{extractor}' not found or not callable.")
             if dispatcher in first_page:
                 logger.debug(f"Detected '{dispatcher}' bill. Using {extractor} ...")
-                return globals()[extractor](file, pdf)
+                return globals()[extractor](file, pdf, ours)
         if not found_extractor:
             logger.error(f"Could not detect the type of bill for '{file}'. Skipping")
             return None
 
 
-def extract_nufri_bill(file, pdf):
+def extract_nufri_bill(file, pdf, ours:list):
     bill_info = _get_default_bill_info()
     first_page = pdf.pages[0]
     for line in first_page.extract_text().split('\n'):
-        if 'CAMPANILLA' in line:
+        logger.debug(f"Extracting info from '{line}' ...")
+        if _is_ours(ours, line):
             bill_info['is_ours'] = True
             continue
         if 'Nº de Factura:' in line:
@@ -212,11 +270,12 @@ def _extract_nufri_power(line:str) -> str:
     return power_type, power_amount
 
 
-def extract_total_bill(file, pdf):
+def extract_total_bill(file, pdf, ours:list):
     bill_info = _get_default_bill_info()
     first_page = pdf.pages[0]
     for line in first_page.extract_text().split('\n'):
-        if 'CAMPANILLA' in line:
+        logger.debug(f"Extracting info from '{line}' ...")
+        if _is_ours(ours, line):
             bill_info['is_ours'] = True
             continue
         if 'Nº Factura' in line:
@@ -269,11 +328,12 @@ def _extract_total_power(line:str) -> str:
     return power_type, power_amount
 
 
-def extract_endesa_bill(file, pdf):
+def extract_endesa_bill(file, pdf, ours:list):
     bill_info = _get_default_bill_info()
     first_page = pdf.pages[0]
     for line in first_page.extract_text().split('\n'):
-        if 'CAMPANILLA' in line:
+        logger.debug(f"Extracting info from '{line}' ...")
+        if _is_ours(ours, line):
             bill_info['is_ours'] = True
             continue
         if 'Nº factura:' in line or 'Nº de factura:' in line or 'Nºfactura:' in line:
@@ -354,6 +414,24 @@ def _extract_billed_amount(data:dict, key:str) -> str:
     return locale.atof(billed_amount[0].replace('€', '').strip())
 
 
+def _is_ours(ours:list, line:str) -> bool:
+    """Checks that a bill is ours.
+
+    Given a line from the PDF, return True if it contains one of the
+    magic string indicating that the bill is ours.
+
+    Args:
+        ours (list): A list of magic substrings to search for.
+        line (str): The line of the PDF file.
+    Returns:
+        bool: True if any substring from 'ours' is found in 'line', False otherwise.
+    """
+    for our in ours:
+        if our in line:
+            return True
+    return False
+
+
 def _get_default_bill_info():
     return {
         'is_ours': False,
@@ -374,11 +452,12 @@ def _get_default_bill_info():
         'cups': None,
     }
 
+
 def sanitize_bill(data:dict):
     """
     Sanitize the bill data by converting strings to appropriate types and formatting.
     """
-    is_sane, missing_keys = is_bill_sane(data)
+    is_sane, missing_keys = _is_bill_sane(data)
     if not is_sane:
         logger.error(f"Missing keys for CUPS {data['cups']} and bill {data['bill_id']}: {missing_keys}")
         return None
@@ -438,7 +517,7 @@ def sanitize_bill(data:dict):
     return data
 
 
-def is_bill_sane(data:dict):
+def _is_bill_sane(data:dict):
     # check that all the keys have a value
     is_sane = True
     missing_keys = []
@@ -449,7 +528,7 @@ def is_bill_sane(data:dict):
     return is_sane, missing_keys
 
 
-def generate_bill_report(args, bills:dict):
+def generate_bill_report(args, bills:dict, loads:dict):
     """
     Generates an Excel workbook report from provided bill information.
 
@@ -464,6 +543,8 @@ def generate_bill_report(args, bills:dict):
             - output: The file path where the Excel workbook will be saved.
         bills (dict): A dictionary where each key is a CUPS identifier and each value is another
             dictionary containing bill information for that CUPS.
+        loads (dict): A dictionary where each key is a CUPS identifier and each value is another
+            dictionary containing load information for that CUPS.
 
     Returns:
         None. The function saves the generated Excel workbook to the specified output file.
@@ -479,6 +560,15 @@ def generate_bill_report(args, bills:dict):
     ws.append(["-", "P1", "P2", "P3", "P4", "P5", "P6"])
     for k,v in args.defaults['tariffs'].items():
         ws.append([k, *v])
+
+    ws = wb.create_sheet(title="Loads")
+    ws.append(["CUPS", "Fecha", "AE_kWh"])
+    for cups, cups_loads in loads.items():
+        # if cups not in bills:
+        #     logger.warning(f"Skipping loads for CUPS '{cups}'. No bills found for that CUPS.")
+        #     continue
+        for dt, load in cups_loads.items():
+            ws.append([ cups, dt, load ])
 
     sheets = {}
     # Add a new worksheet
@@ -500,7 +590,7 @@ def generate_bill_report(args, bills:dict):
             ordered_sheets.append(sheets[title])
     if len(ordered_sheets) == 0:
         ordered_sheets.extend(list(sheets.values()))
-    wb._sheets = [ wb.worksheets[0] ] + ordered_sheets
+    wb._sheets = [ wb.worksheets[0], wb.worksheets[1] ] + ordered_sheets
 
     # Save the workbook
     wb.save(args.output)

@@ -19,12 +19,16 @@ function formatAllSheets() {
   sheets.forEach(sheet => {
     Logger.log("Processing sheet '" + sheet.getName() + "' ...");
     if (['Simulación'].includes(sheet.getName())) {
-      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP1', 'B')
-      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP2', 'C')
-      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP3', 'D')
-      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP4', 'E')
-      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP5', 'F')
-      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP6', 'G')
+      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP1', 'B', 2)
+      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP2', 'C', 2)
+      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP3', 'D', 2)
+      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP4', 'E', 2)
+      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP5', 'F', 2)
+      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP6', 'G', 2)
+
+      const range = sheet.getRange("B2:G2");
+      range.setNote("Este precio se utiliza para las simulaciones");
+      range.setBackground("#FFF2CC"); // Light Yellow 3 background
 
       const columnIndices = getColumnIndices(sheet)
       setColumnFormat(sheet, columnIndices["P1"], "power_consumption");
@@ -33,7 +37,10 @@ function formatAllSheets() {
       setColumnFormat(sheet, columnIndices["P4"], "power_consumption");
       setColumnFormat(sheet, columnIndices["P5"], "power_consumption");
       setColumnFormat(sheet, columnIndices["P6"], "power_consumption");
-
+    } else if (['Loads'].includes(sheet.getName())) {
+      const columnIndices = getColumnIndices(sheet)
+      setColumnFormat(sheet, columnIndices["Fecha"], "datetime");
+      setColumnFormat(sheet, columnIndices["AE_kWh"], "power");
     } else {
       const lastRow = sheet.getLastRow();
       if (lastRow === 0) return; // Skip empty sheets
@@ -65,15 +72,20 @@ function formatAllSheets() {
       setColumnFormat(sheet, columnIndices[averagePrice], "power_consumption");
 
       // Simulate the energy cost with the prices in the different named range.
-      const simulatedEnergy = "Energía € (Simulación) "
+      const simulatedEnergy = "Simulación - Energía"
       createSimulatedEnergyColumn(sheet, powerIndices, columnIndices[simulatedEnergy], simulatedEnergy)
       setColumnFormat(sheet, columnIndices[simulatedEnergy], "currency");
+
+      const simulatedVariation = "Simulación - Variation"
+      const ciEnergy = columnIndices["Energía"]
+      const ciSimulatedEnergy = columnIndices[simulatedEnergy]
+      createSimulatedVariationColumn(sheet, ciEnergy, ciSimulatedEnergy, columnIndices[simulatedVariation],  simulatedVariation)
+      setColumnFormat(sheet, columnIndices[simulatedVariation], "percent");
 
       // Link with the files in Drive
       createLinks(sheet, columnIndices["Nº de factura"], columnIndices["Fichero"])
 
       freezeColumn(sheet, 3)
-
 
       sortByColumn(sheet, columnIndices["Inicio del periodo"])
 
@@ -89,8 +101,12 @@ function formatAllSheets() {
         }
       });
 
-      createBilledAmountChart(sheet, columnIndices["Inicio del periodo"], columnIndices["Importe facturado"])
-      createPowerDistributionChart(sheet, columnIndices["Inicio del periodo"], powerIndices)
+      if (sheet.getLastRow() > 5) {
+        createBilledAmountChart(sheet, columnIndices["Inicio del periodo"], columnIndices["Importe facturado"])
+        createPowerDistributionChart(sheet, columnIndices["Inicio del periodo"], powerIndices)
+      } else {
+        Logger.log("Skipping graphs for sheet '" + sheet.getName() + "': not enough data");
+      }
     }
 
   });
@@ -141,8 +157,14 @@ function setColumnFormat(sheet, columnIndex, columnType) {
     case "number":
       columnRange.setNumberFormat("0.00");
       break;
+    case "datetime":
+      columnRange.setNumberFormat("yyyy-MM-dd HH:00");
+      break;
     case "date":
       columnRange.setNumberFormat("yyyy-MM-dd");
+      break;
+    case "percent":
+      columnRange.setNumberFormat("0.00%");
       break;
     default:
       throw new Error(`Unsupported column type: ${columnType}`);
@@ -158,9 +180,9 @@ function setColumnFormat(sheet, columnIndex, columnType) {
 }
 
 
-function addNamedRange(spreadsheet, sheet, rangeName, columnLetter) {
+function addNamedRange(spreadsheet, sheet, rangeName, columnLetter, row) {
   if (spreadsheet.getRangeByName(rangeName) === null) {
-    const range = sheet.getRange(`${sheet.getName()}!${columnLetter}2`);
+    const range = sheet.getRange(`${sheet.getName()}!${columnLetter}${row}`);
     spreadsheet.setNamedRange(rangeName, range);
   }
 }
@@ -190,12 +212,12 @@ function createAveragePriceColumn(sheet, ciBilledAmount, powerColumnIndices, col
   }
 
   // Calculate the average...
-  for (let i = 2; i <= sheet.getLastRow(); i++) { // skip headers
+  for (let row = 2; row <= sheet.getLastRow(); row++) { // skip headers
     const clBilledAmount = index2Letter(ciBilledAmount)
-    const clPowers = powerColumnIndices.map(c => `${index2Letter(c)}${i}`).join("+")
-    const formulaValue = `${clBilledAmount}${i}/(${clPowers})`
-    const formula = `=IFERROR(IF(${formulaValue} > 0; ${formulaValue}; 0); "")`;
-    sheet.getRange(i, columnIndex).setFormula(formula);
+    const clPowers = powerColumnIndices.map(c => `${index2Letter(c)}${row}`).join("+")
+    const formulaValue = `${clBilledAmount}${row}/(${clPowers})`
+    const formula = `=IFERROR(IF(${formulaValue} > 0; ${formulaValue}; ""); "")`;
+    sheet.getRange(row, columnIndex).setFormula(formula);
   }
 }
 
@@ -221,7 +243,57 @@ function createSimulatedEnergyColumn(sheet, powerColumnIndices, columnIndex, col
   }
 }
 
+function createSimulatedVariationColumn(sheet, ciEnergy, ciSimulatedEnergy, columnIndex, columnName) {
+  // Add a new header for the calculated column
+  if (columnIndex === undefined || columnIndex === -1) {
+    sheet.getRange(1, sheet.getLastColumn() + 1).setValue(columnName);
+    columnIndex = sheet.getLastColumn();
+  }
 
+  // Calculate the variation of the Energy cost...
+  for (let row = 2; row <= sheet.getLastRow(); row++) { // skip headers
+    const clEnergy = index2Letter(ciEnergy)
+    const clSimulatedEnergy = index2Letter(ciSimulatedEnergy)
+    const formulaValue = `(${clSimulatedEnergy}${row} / ${clEnergy}${row}) - 1`
+    const formula = `=IFERROR(${formulaValue}; "")`;
+    sheet.getRange(row, columnIndex).setFormula(formula);
+  }
+
+  range = sheet.getRange(`${index2Letter(columnIndex)}2:${index2Letter(columnIndex)}${sheet.getLastRow()}`); // skip headers
+  range.setNote("Indica la variation del coste de la Energía entre la antigua tarrifa y la nueva");
+
+  // apply conditional formating
+  setConditionalFormatting(sheet, columnIndex)
+}
+
+function setConditionalFormatting(sheet, columnIndex) {
+  const cl = index2Letter(columnIndex)
+  const range = sheet.getRange(`${cl}2:${cl}`); // skip headers
+
+  // Clear existing rules
+  const rules = sheet.getConditionalFormatRules().filter(rule => {
+    const ruleRanges = rule.getRanges();
+    return !ruleRanges.some(r => r.getA1Notation() === range.getA1Notation());
+  });
+
+  // Rule for positive numbers - RED background
+  const positiveRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenNumberGreaterThan(0)
+    .setBackground("#F4CCCC") // Light Red 3
+    .setRanges([range])
+    .build();
+
+  // Rule for negative numbers - GREEN background
+  const negativeRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenNumberLessThan(0)
+    .setBackground("#D9EAD3") // Light Green 3
+    .setRanges([range])
+    .build();
+
+  rules.push(positiveRule);
+  rules.push(negativeRule);
+  sheet.setConditionalFormatRules(rules);
+}
 
 /**
  * Converts a 1-based column index to its corresponding Excel-style column letter(s).

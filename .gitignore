@@ -195,3 +195,4 @@ cython_debug/
 
 bills
 *.xlsx
+consumption/*.csv
