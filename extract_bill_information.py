@@ -288,7 +288,7 @@ def extract_total_bill(file, pdf, ours:list):
         if 'Periodo de facturación:' in line:
             bill_info['billing_period'] = line.split(':')[-1].strip()
             continue
-        if line.startswith('Potencia '):
+        if line.startswith('Potencia ') or line.startswith('Peajes '):
             bill_info['billed_power_capacity'] = line
             continue
         if line.startswith('Energía '):
