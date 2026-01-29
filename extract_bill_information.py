@@ -79,7 +79,7 @@ def parse_command_line(defaults):
     parser.add_argument(
         '--output', help=f"The name of the report. By default '{defaults['output']}'.", required=False, default=defaults['output'])
     parser.add_argument(
-        '--limit', type=int, help=f"Limit the number of ticket to download. By default '{defaults['limit']}' (-1 is no limit).", required=False, default=defaults['limit'])
+        '--limit', type=int, help=f"Limit the number of files processed. By default '{defaults['limit']}' (-1 is no limit).", required=False, default=defaults['limit'])
     parser.set_defaults(func=extract_bill_information)
     return parser.parse_args()
 

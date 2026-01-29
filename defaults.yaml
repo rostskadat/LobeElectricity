@@ -6,7 +6,7 @@ output: bills-Comunidad.xlsx
 # output: bills-CondesDeAragon36.xlsx
 load-input-dir: consumption
 
-include-loads: true
+include-loads: False
 locale: es_ES.utf8
 limit: -1
 # Detect the emissor of the bill, and extract accordingly

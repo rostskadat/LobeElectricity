@@ -38,9 +38,9 @@ function formatAllSheets() {
       setColumnFormat(sheet, columnIndices["P5"], "power_consumption");
       setColumnFormat(sheet, columnIndices["P6"], "power_consumption");
     } else if (['Loads'].includes(sheet.getName())) {
-      const columnIndices = getColumnIndices(sheet)
-      setColumnFormat(sheet, columnIndices["Fecha"], "datetime");
-      setColumnFormat(sheet, columnIndices["AE_kWh"], "power");
+      // const columnIndices = getColumnIndices(sheet)
+      // setColumnFormat(sheet, columnIndices["Fecha"], "datetime");
+      // setColumnFormat(sheet, columnIndices["AE_kWh"], "power");
     } else {
       const lastRow = sheet.getLastRow();
       if (lastRow === 0) return; // Skip empty sheets
