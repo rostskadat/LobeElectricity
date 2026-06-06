@@ -18,29 +18,9 @@ function formatAllSheets() {
   const sheets = spreadsheet.getSheets();
   sheets.forEach(sheet => {
     Logger.log("Processing sheet '" + sheet.getName() + "' ...");
-    if (['Simulación'].includes(sheet.getName())) {
-      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP1', 'B', 2)
-      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP2', 'C', 2)
-      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP3', 'D', 2)
-      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP4', 'E', 2)
-      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP5', 'F', 2)
-      addNamedRange(spreadsheet, sheet, 'SimulatedPriceP6', 'G', 2)
-
-      const range = sheet.getRange("B2:G2");
-      range.setNote("Este precio se utiliza para las simulaciones");
-      range.setBackground("#FFF2CC"); // Light Yellow 3 background
-
-      const columnIndices = getColumnIndices(sheet)
-      setColumnFormat(sheet, columnIndices["P1"], "power_consumption");
-      setColumnFormat(sheet, columnIndices["P2"], "power_consumption");
-      setColumnFormat(sheet, columnIndices["P3"], "power_consumption");
-      setColumnFormat(sheet, columnIndices["P4"], "power_consumption");
-      setColumnFormat(sheet, columnIndices["P5"], "power_consumption");
-      setColumnFormat(sheet, columnIndices["P6"], "power_consumption");
-    } else if (['Loads'].includes(sheet.getName())) {
-      // const columnIndices = getColumnIndices(sheet)
-      // setColumnFormat(sheet, columnIndices["Fecha"], "datetime");
-      // setColumnFormat(sheet, columnIndices["AE_kWh"], "power");
+    if (['Constants'].includes(sheet.getName()) ||
+        ['Loads'].includes(sheet.getName())) {
+      // Skipping...
     } else {
       const lastRow = sheet.getLastRow();
       if (lastRow === 0) return; // Skip empty sheets
@@ -49,7 +29,7 @@ function formatAllSheets() {
       const columnIndices = getColumnIndices(sheet)
       const powerIndices = ["P1", "P2", "P3", "P4", "P5", "P6"].map(p => columnIndices[p]);
 
-      resetAllCharts(sheet)
+      removeAllCharts(sheet)
 
       // Setting format in order to allow for calculations
       setColumnFormat(sheet, columnIndices["Fecha de factura"], "date");
@@ -57,7 +37,6 @@ function formatAllSheets() {
       setColumnFormat(sheet, columnIndices["Fin del periodo"], "date");
       setColumnFormat(sheet, columnIndices["Potencia"], "currency");
       setColumnFormat(sheet, columnIndices["Energía"], "currency");
-      setColumnFormat(sheet, columnIndices["Importe a pagar"], "currency");
       setColumnFormat(sheet, columnIndices["Importe facturado"], "currency");
       setColumnFormat(sheet, columnIndices["P1"], "power");
       setColumnFormat(sheet, columnIndices["P2"], "power");
@@ -65,22 +44,23 @@ function formatAllSheets() {
       setColumnFormat(sheet, columnIndices["P4"], "power");
       setColumnFormat(sheet, columnIndices["P5"], "power");
       setColumnFormat(sheet, columnIndices["P6"], "power");
+      setColumnFormat(sheet, columnIndices["Tipo de contrato"], "contract_type");
 
       // calculate the kWh average price
-      const averagePrice = "AVG €/kWh"
-      createAveragePriceColumn(sheet, columnIndices["Energía"], powerIndices, columnIndices[averagePrice], averagePrice)
-      setColumnFormat(sheet, columnIndices[averagePrice], "power_consumption");
+      // const averagePrice = "AVG €/kWh"
+      // createAveragePriceColumn(sheet, columnIndices["Energía"], powerIndices, columnIndices[averagePrice], averagePrice)
+      // setColumnFormat(sheet, columnIndices[averagePrice], "power_consumption");
 
       // Simulate the energy cost with the prices in the different named range.
-      const simulatedEnergy = "Simulación - Energía"
-      createSimulatedEnergyColumn(sheet, powerIndices, columnIndices[simulatedEnergy], simulatedEnergy)
-      setColumnFormat(sheet, columnIndices[simulatedEnergy], "currency");
+      // const simulatedEnergy = "Simulación - Energía"
+      // createSimulatedEnergyColumn(sheet, powerIndices, columnIndices[simulatedEnergy], simulatedEnergy)
+      // setColumnFormat(sheet, columnIndices[simulatedEnergy], "currency");
 
-      const simulatedVariation = "Simulación - Variation"
-      const ciEnergy = columnIndices["Energía"]
-      const ciSimulatedEnergy = columnIndices[simulatedEnergy]
-      createSimulatedVariationColumn(sheet, ciEnergy, ciSimulatedEnergy, columnIndices[simulatedVariation],  simulatedVariation)
-      setColumnFormat(sheet, columnIndices[simulatedVariation], "percent");
+      // const simulatedVariation = "Simulación - Variation"
+      // const ciEnergy = columnIndices["Energía"]
+      // const ciSimulatedEnergy = columnIndices[simulatedEnergy]
+      // createSimulatedVariationColumn(sheet, ciEnergy, ciSimulatedEnergy, columnIndices[simulatedVariation],  simulatedVariation)
+      // setColumnFormat(sheet, columnIndices[simulatedVariation], "percent");
 
       // Link with the files in Drive
       createLinks(sheet, columnIndices["Nº de factura"], columnIndices["Fichero"])
@@ -90,16 +70,15 @@ function formatAllSheets() {
       sortByColumn(sheet, columnIndices["Inicio del periodo"])
 
       hideColumn(sheet, columnIndices["Fecha de factura"])
-      hideColumn(sheet, columnIndices["Rectificación"])
-      hideColumn(sheet, columnIndices["Rectificación"])
+      hideColumn(sheet, columnIndices["Tipo de contrato"])
       hideColumn(sheet, columnIndices["Fichero"])
 
-      powerColumns = ["P1", "P2", "P3", "P4", "P5", "P6"]
-      powerColumns.forEach(function (columnName) {
-        if (isColumnEmpty(sheet, columnIndices[columnName])) {
+      const contractType = sheet.getRange(2, columnIndices["Tipo de contrato"]).getValue();
+      if (contractType == 2) {
+        ["P4", "P5", "P6"].forEach(function (columnName) {
           hideColumn(sheet, columnIndices[columnName])
-        }
-      });
+        });
+      }
 
       if (sheet.getLastRow() > 5) {
         createBilledAmountChart(sheet, columnIndices["Inicio del periodo"], columnIndices["Importe facturado"])
@@ -137,9 +116,9 @@ function getColumnIndices(sheet) {
  * @throws {Error} Throws an error if an unsupported column type is provided.
  */
 function setColumnFormat(sheet, columnIndex, columnType) {
-  if (columnIndex == null) {
-    return
-  }
+  // if (columnIndex == null) {
+  //   return
+  // }
   const numRows = sheet.getLastRow();
   const columnRange = sheet.getRange(2, columnIndex, numRows - 1); // Exclude header row
 
@@ -166,6 +145,9 @@ function setColumnFormat(sheet, columnIndex, columnType) {
     case "percent":
       columnRange.setNumberFormat("0.00%");
       break;
+    case "contract_type":
+      columnRange.setNumberFormat("0.0");
+      break;
     default:
       throw new Error(`Unsupported column type: ${columnType}`);
   }
@@ -179,7 +161,16 @@ function setColumnFormat(sheet, columnIndex, columnType) {
 
 }
 
-
+/**
+ * Add a named range to the spreadsheet if it doesn't exist.
+ * The named range will point to a specific cell in the given sheet.
+ *
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} spreadsheet - the Google Spreadsheet where the named range will be added
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - the sheet where the named range will point to
+ * @param {string} rangeName - the name of the named range to be added
+ * @param {string} columnLetter - the letter of the column where the named range will point to (e.g., "B")
+ * @param {number} row - the row number where the named range will point to (e.g., 2)
+ */
 function addNamedRange(spreadsheet, sheet, rangeName, columnLetter, row) {
   if (spreadsheet.getRangeByName(rangeName) === null) {
     const range = sheet.getRange(`${sheet.getName()}!${columnLetter}${row}`);
@@ -379,14 +370,18 @@ function createLinks(sheet, ciBillId, ciPdfFile) {
   }
   const data = sheet.getDataRange().getValues();
   for (let i = 2; i <= data.length; i++) {
-    const noFactura = sheet.getRange(i, ciBillId).getValue();
-    const fileName = sheet.getRange(i, ciPdfFile).getValue();
-    const files = DriveApp.getFilesByName(fileName);
-    if (files.hasNext()) {
-      const url = files.next().getUrl();
-      sheet.getRange(i, ciBillId).setFormula(`=HYPERLINK("${url}"; "${noFactura}")`);
+    cell = sheet.getRange(i, ciBillId)
+    if (cell.getFormula().startsWith("=HYPERLINK(")) {
+      continue;
+    }
+    const billId = cell.getValue();
+    const pdfFile = sheet.getRange(i, ciPdfFile).getValue();
+    const pdfFiles = DriveApp.getFilesByName(pdfFile);
+    if (pdfFiles.hasNext()) {
+      const url = pdfFiles.next().getUrl();
+      cell.setFormula(`=HYPERLINK("${url}"; "${billId}")`);
     } else {
-      Logger.log("No file found with the name: " + fileName);
+      Logger.log("No file found with the name: " + pdfFile);
     }
   }
 }
@@ -396,16 +391,12 @@ function createLinks(sheet, ciBillId, ciPdfFile) {
  * Removes all charts from the given Google Sheets sheet, except for sheets named "Hoja 1".
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet from which to remove all charts.
- * @returns {void|null} Returns null if there are no charts to remove; otherwise, returns nothing.
+ * @returns {void} returns nothing.
  */
-function resetAllCharts(sheet) {
-  if (sheet.getName() in ["Hoja 1"]) {
-    return
-  }
-
+function removeAllCharts(sheet) {
   const charts = sheet.getCharts();
   if (charts.length === 0) {
-    return null;
+    return
   }
 
   for (const i in charts) {

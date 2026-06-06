@@ -1,0 +1,45 @@
+Value holder (CDAD ?PROP ?ANDADOR ?CAMPANILLA)
+Value billed_amount (-?[0-9\.]+,[0-9]+)
+Value bill_id (\S+)
+Value billing_date (\d{2}/\d{2}/\d{4})
+Value billing_period_start (\d{2}/\d{2}/\d{4})
+Value billing_period_end (\d{2}/\d{2}/\d{4})
+Value cups (\S+)
+Value contract_type (\S+)
+Value billed_energy (-?[0-9\.]+,[0-9]+)
+Value billed_power ([0-9\.]+,[0-9]+)
+Value P1 ([0-9\.]+,[0-9]+)
+Value P2 ([0-9\.]+,[0-9]+)
+Value P3 ([0-9\.]+,[0-9]+)
+Value P4 ([0-9\.]+,[0-9]+)
+Value P5 ([0-9\.]+,[0-9]+)
+Value P6 ([0-9\.]+,[0-9]+)
+
+Start
+  ^DATOS ?DE ?LA ?FACTURA -> FoundInvoice
+
+FoundInvoice
+  ^Total\s+${billed_amount}\s*€
+  ^(Nº de factura|Nº factura|Nºfactura):\s*${bill_id}
+  ^(Fecha emisión factura|Fechaemisiónfactura):\s*${billing_date}
+  ^(Periodo de facturación|Periododefacturación):\s*del\s*${billing_period_start}\s*al?\s*${billing_period_end}
+  ^Potencia\s+${billed_power}\s*€
+  ^Energía\s+${billed_energy}\s*€
+  ^${holder}
+  ^(Titular del contrato|Titulardelcontrato):\s*${holder}\s*CUPS:\s*${cups}
+  ^Titular del contrato:\s*${holder}\s+Número de contador:
+  ^.*(Peaje de transporte y distribución|Peajedetransporteydistribución):\s*${contract_type}
+  ^CUPS:\s+${cups}\s+.*
+  ^DETALLE ?DE ?LA ?FACTURA -> EndesaDetails
+
+EndesaDetails
+  ^P1 1.18.1(\s+[0-9\.]+,[0-9]+){4}\s+${P1}
+  ^P2 1.18.2(\s+[0-9\.]+,[0-9]+){4}\s+${P2}
+  ^P3 1.18.3(\s+[0-9\.]+,[0-9]+){4}\s+${P3}
+  ^P4 1.18.4(\s+[0-9\.]+,[0-9]+){4}\s+${P4}
+  ^P5 1.18.5(\s+[0-9\.]+,[0-9]+){4}\s+${P5}
+  ^P6 1.18.6(\s+[0-9\.]+,[0-9]+){4}\s+${P6}
+  ^.*Punta(\s+[0-9\.]+,[0-9]+){4}\s+${P1}
+  ^.*Llano(\s+[0-9\.]+,[0-9]+){4}\s+${P2}
+  ^.*Valle(\s+[0-9\.]+,[0-9]+){4}\s+${P3}
+  ^ATENCIÓN ?AL ?CLIENTE -> Record

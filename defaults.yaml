@@ -1,11 +1,22 @@
 bill-input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Comunidad/Electricidad
 output: bills-Comunidad.xlsx
-# bill-input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Contrato Electricidad
+gsheet-id: 1uErkSzfxNqFBKGpsOlhQtoNOp7euY6erFWEdxtt32fc
+
+# bill-input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Contrato Electricidad/2024
 # output: bills-E74A.xlsx
+# gsheet-id: 1nKrjqB1AHhA3br43rSfknFwhRWDx48SX5D9khpohulo
+
 # bill-input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/CONDES DE ARAGÓN 36 ZARAGOZA/Facturas/Endesa
 # output: bills-CondesDeAragon36.xlsx
+# gsheet-id: xxxxxxxxxxxxx
+bill-input-excludes:
+  - "Simulation - Plenitude/.*"
+  - "Simulation - Qener/.*"
+  - "Paneles/.*"
+  - ".*/Contracts/.*"
+  - "ES0031300855112011HB0F - Piscina/.*"
 load-input-dir: consumption
-
+dump-output-prefix: dump-
 include-loads: False
 locale: es_ES.utf8
 limit: -1
@@ -13,7 +24,8 @@ limit: -1
 dispatchers:
   "Energia Nufri S.L.U.": extract_nufri_bill
   "A81948077": extract_endesa_bill
-  "A87803862": extract_total_bill
+  "A87803862": extract_te_bill
+  "900 101 142": extract_qener_bill
 # Our bills
 ours:
   - CAMPANILLA
@@ -27,17 +39,16 @@ column_labels:
   billing_date: Fecha de factura
   billing_period_start: Inicio del periodo
   billing_period_end: Fin del periodo
-  billed_power_capacity: Potencia
-  billed_energy_consumed: Energía
-  billed_amount_0: Importe a pagar
-  billed_amount_1: Importe facturado
-  is_rectification: Rectificación
+  billed_power: Potencia
+  billed_energy: Energía
+  billed_amount: Importe facturado
   P1: P1
   P2: P2
   P3: P3
   P4: P4
   P5: P5
   P6: P6
+  contract_type: Tipo de contrato
   file: Fichero
 # The localized worksheet label. Each worksheet corresponds to a specific
 #   CUPS. The worksheet will be ordered in the order of the dict below.
@@ -51,16 +62,27 @@ sheet_names:
   ES0031300855147001KH0F: ACS - 01KH0F
   ES0031300855143010DY0F: GARAJE - 10DY0F
   ES0031300855147011EM0F: INCENDIOS - 11EM0F
-  # ES0031300855146007RJ0F: E7 - 4A
-  # ES0031300855700019PR0F: E36.1 - 4B
-# These are the tariffs that We want to appear on the Simulacion sheet.
+  ES0031300855146007RJ0F: E7 - 4A
+  ES0031300855700019PR0F: E36.1 - 4B
+contract_types:
+  ES0031300855143009DM0F: 2.0
+  ES0031300855145010GM0F: 2.0
+  ES0031300855146009RS0F: 2.0
+  ES0031300855147010EG0F: 2.0
+  ES0031300855147001KH0F: 3.0
+  ES0031300855143010DY0F: 2.0
+  ES0031300855147011EM0F: 2.0
+  ES0031300855146007RJ0F: 2.0
+  ES0031300855700019PR0F: 2.0
+# These are the tariffs that we want to appear on the Simulacion sheet.
 # Note that the Simulacion sheet will always appear on the first page.
 # Each key must be a 6-float array, for P1 to P6 energy cost.
-tariffs:
-  TE 3.0: [0.211228, 0.182515, 0.15511, 0.133022, 0.114903, 0.126166]
-  TE 2.0: [0.230642, 0.159753, 0.125822, 0, 0, 0]
-  Cye Energia 3.0: [0.199190, 0.172698, 0.142268, 0.122255, 0.109741, 0.115186]
-  Energia Nufri 2.0: [0.133920, 0.133920, 0.133920, 0, 0, 0]
+# tariffs:
+#   TE 3.0: [0.211228, 0.182515, 0.15511, 0.133022, 0.114903, 0.126166]
+#   TE 2.0: [0.230642, 0.159753, 0.125822, 0, 0, 0]
+#   Cye Energia 3.0: [0.199190, 0.172698, 0.142268, 0.122255, 0.109741, 0.115186]
+#   Energia Nufri 2.0: [0.133920, 0.133920, 0.133920, 0, 0, 0]
+#   Qener: [0.139, 0.139, 0.139, 0.139, 0.139, 0.139]
 loads:
   TD2.0:
     default: "P3"

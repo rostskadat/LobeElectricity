@@ -1,0 +1,122 @@
+Value holder (.*)
+Value billed_amount ([0-9\.]+,[0-9]+)
+Value bill_id (\S+)
+Value billing_date (\d{2}/\d{2}/\d{4})
+Value billing_period_start (\d{2}/\d{2}/\d{4})
+Value billing_period_end (\d{2}/\d{2}/\d{4})
+Value cups (\S+)
+Value contract_type (\S+)
+Value te_power_access_P1 ([0-9]+,[0-9]{2})
+Value te_power_access_P2 ([0-9]+,[0-9]{2})
+Value te_power_access_P3 ([0-9]+,[0-9]{2})
+Value te_power_access_P4 ([0-9]+,[0-9]{2})
+Value te_power_access_P5 ([0-9]+,[0-9]{2})
+Value te_power_access_P6 ([0-9]+,[0-9]{2})
+Value te_power_P1 ([0-9]+,[0-9]{2})
+Value te_power_P2 ([0-9]+,[0-9]{2})
+Value te_power_P3 ([0-9]+,[0-9]{2})
+Value te_power_P4 ([0-9]+,[0-9]{2})
+Value te_power_P5 ([0-9]+,[0-9]{2})
+Value te_power_P6 ([0-9]+,[0-9]{2})
+Value te_power_charge_P1 ([0-9]+,[0-9]{2})
+Value te_power_charge_P2 ([0-9]+,[0-9]{2})
+Value te_power_charge_P3 ([0-9]+,[0-9]{2})
+Value te_power_charge_P4 ([0-9]+,[0-9]{2})
+Value te_power_charge_P5 ([0-9]+,[0-9]{2})
+Value te_power_charge_P6 ([0-9]+,[0-9]{2})
+Value te_energy_access_P1 ([0-9]+,[0-9]{2})
+Value te_energy_access_P2 ([0-9]+,[0-9]{2})
+Value te_energy_access_P3 ([0-9]+,[0-9]{2})
+Value te_energy_access_P4 ([0-9]+,[0-9]{2})
+Value te_energy_access_P5 ([0-9]+,[0-9]{2})
+Value te_energy_access_P6 ([0-9]+,[0-9]{2})
+Value te_energy_P1 ([0-9]+,[0-9]{2})
+Value te_energy_P2 ([0-9]+,[0-9]{2})
+Value te_energy_P3 ([0-9]+,[0-9]{2})
+Value te_energy_P4 ([0-9]+,[0-9]{2})
+Value te_energy_P5 ([0-9]+,[0-9]{2})
+Value te_energy_P6 ([0-9]+,[0-9]{2})
+Value te_energy_charge_P1 ([0-9]+,[0-9]{2})
+Value te_energy_charge_P2 ([0-9]+,[0-9]{2})
+Value te_energy_charge_P3 ([0-9]+,[0-9]{2})
+Value te_energy_charge_P4 ([0-9]+,[0-9]{2})
+Value te_energy_charge_P5 ([0-9]+,[0-9]{2})
+Value te_energy_charge_P6 ([0-9]+,[0-9]{2})
+Value P1 ([0-9,]+)
+Value P2 ([0-9,]+)
+Value P3 ([0-9,]+)
+Value P4 ([0-9,]+)
+Value P5 ([0-9,]+)
+Value P6 ([0-9,]+)
+
+Start
+  ^Factura electricidad -> FoundInvoice
+
+FoundInvoice
+  ^Importe factura electricidad:\s+${billed_amount}\s+€
+  ^Titular:\s+${holder}
+  ^Nº Factura\s+${bill_id}
+  ^Periodo de facturación:\s+De\s+${billing_period_start}\s+al\s+${billing_period_end}
+  ^Fecha de cargo/fecha limite de pago\s+${billing_date}
+  ^Peaje de acceso:\s+${contract_type}
+  ^Código unificado de punto de suministro\(CUPS\):\s+${cups}
+  ^Término Potencia Tarifa Acceso$$ -> TEPowerAccess
+  ^Término Potencia$$ -> TEPower
+  ^Término Cargos Potencia Acceso$$ -> TEPowerCharge
+  ^Término Energía Tarifa Acceso$$ -> TEEnergyAccess
+  ^Término Energía$$ -> TEEnergy
+  ^Término Cargos Energía Acceso$$ -> TEEnergyCharge
+
+TEPowerAccess
+  ^P1.*?${te_power_access_P1}\s+€
+  ^P2.*?${te_power_access_P2}\s+€
+  ^P3.*?${te_power_access_P3}\s+€
+  ^P4.*?${te_power_access_P4}\s+€
+  ^P5.*?${te_power_access_P5}\s+€
+  ^P6.*?${te_power_access_P6}\s+€
+  ^Término Potencia$$ -> TEPower
+
+TEPower
+  ^P1.*?${te_power_P1}\s+€
+  ^P2.*?${te_power_P2}\s+€
+  ^P3.*?${te_power_P3}\s+€
+  ^P4.*?${te_power_P4}\s+€
+  ^P5.*?${te_power_P5}\s+€
+  ^P6.*?${te_power_P6}\s+€
+  ^Término Cargos Potencia Acceso$$ -> TEPowerCharge
+
+TEPowerCharge
+  ^P1.*?${te_power_charge_P1}\s+€
+  ^P2.*?${te_power_charge_P2}\s+€
+  ^P3.*?${te_power_charge_P3}\s+€
+  ^P4.*?${te_power_charge_P4}\s+€
+  ^P5.*?${te_power_charge_P5}\s+€
+  ^P6.*?${te_power_charge_P6}\s+€
+  ^Término Energía Tarifa Acceso$$ -> TEEnergyAccess
+
+TEEnergyAccess
+  ^P1.*?${te_energy_access_P1}\s+€
+  ^P2.*?${te_energy_access_P2}\s+€
+  ^P3.*?${te_energy_access_P3}\s+€
+  ^P4.*?${te_energy_access_P4}\s+€
+  ^P5.*?${te_energy_access_P5}\s+€
+  ^P6.*?${te_energy_access_P6}\s+€
+  ^Término Energía$$ -> TEEnergy
+
+TEEnergy
+  ^P1\s+${P1}\s+kWh.*?${te_energy_P1}\s+€
+  ^P2\s+${P2}\s+kWh.*?${te_energy_P2}\s+€
+  ^P3\s+${P3}\s+kWh.*?${te_energy_P3}\s+€
+  ^P4\s+${P4}\s+kWh.*?${te_energy_P4}\s+€
+  ^P5\s+${P5}\s+kWh.*?${te_energy_P5}\s+€
+  ^P6\s+${P6}\s+kWh.*?${te_energy_P6}\s+€
+  ^Término Cargos Energía Acceso$$ -> TEEnergyCharge
+
+TEEnergyCharge
+  ^P1.*?${te_energy_charge_P1}\s+€
+  ^P2.*?${te_energy_charge_P2}\s+€
+  ^P3.*?${te_energy_charge_P3}\s+€
+  ^P4.*?${te_energy_charge_P4}\s+€
+  ^P5.*?${te_energy_charge_P5}\s+€
+  ^P6.*?${te_energy_charge_P6}\s+€
+  ^Impuesto Electricidad -> Record
