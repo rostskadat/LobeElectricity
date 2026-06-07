@@ -48,6 +48,7 @@ Value P3 ([0-9,]+)
 Value P4 ([0-9,]+)
 Value P5 ([0-9,]+)
 Value P6 ([0-9,]+)
+Value te_contracted_power (.*)
 
 Start
   ^Factura electricidad -> FoundInvoice
@@ -58,7 +59,7 @@ FoundInvoice
   ^Nº Factura\s+${bill_id}
   ^Periodo de facturación:\s+De\s+${billing_period_start}\s+al\s+${billing_period_end}
   ^Fecha de cargo/fecha limite de pago\s+${billing_date}
-  ^Peaje de acceso:\s+${contract_type}
+  ^Peaje de acceso:\s+${contract_type}\s+Potencia contratada:\s+${te_contracted_power}
   ^Código unificado de punto de suministro\(CUPS\):\s+${cups}
   ^Término Potencia Tarifa Acceso$$ -> TEPowerAccess
   ^Término Potencia$$ -> TEPower

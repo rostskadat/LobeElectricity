@@ -1,12 +1,12 @@
-bill-input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Comunidad/Electricidad
+bill-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Comunidad/Electricidad
 output: bills-Comunidad.xlsx
 gsheet-id: 1uErkSzfxNqFBKGpsOlhQtoNOp7euY6erFWEdxtt32fc
 
-# bill-input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Contrato Electricidad/2024
+# bill-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Contrato Electricidad/2024
 # output: bills-E74A.xlsx
 # gsheet-id: 1nKrjqB1AHhA3br43rSfknFwhRWDx48SX5D9khpohulo
 
-# bill-input-dir: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/CONDES DE ARAGÓN 36 ZARAGOZA/Facturas/Endesa
+# bill-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/CONDES DE ARAGÓN 36 ZARAGOZA/Facturas/Endesa
 # output: bills-CondesDeAragon36.xlsx
 # gsheet-id: xxxxxxxxxxxxx
 bill-input-excludes:
@@ -26,10 +26,6 @@ dispatchers:
   "A81948077": extract_endesa_bill
   "A87803862": extract_te_bill
   "900 101 142": extract_qener_bill
-# Our bills
-ours:
-  - CAMPANILLA
-  - CONDES DE ARAGON 36
 # The localized column label. The key corresponds to the dict key while the value
 #   is the label used in the Excel sheet
 # BEWARE: The columns in the Excel sheet will be in the same order as the keys
@@ -41,6 +37,7 @@ column_labels:
   billing_period_end: Fin del periodo
   billed_power: Potencia
   billed_energy: Energía
+  gross_amount: Importe bruto
   billed_amount: Importe facturado
   P1: P1
   P2: P2
@@ -48,6 +45,12 @@ column_labels:
   P4: P4
   P5: P5
   P6: P6
+  CP1: CP1
+  CP2: CP2
+  CP3: CP3
+  CP4: CP4
+  CP5: CP5
+  CP6: CP6
   contract_type: Tipo de contrato
   file: Fichero
 # The localized worksheet label. Each worksheet corresponds to a specific

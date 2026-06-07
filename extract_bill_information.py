@@ -22,6 +22,7 @@ try:
     from dotenv import load_dotenv
     from openpyxl import Workbook
     from openpyxl import load_workbook
+    from openpyxl.utils.dataframe import dataframe_to_rows
     from os.path import basename, join, dirname
     from pprint import pprint
     from pathlib import Path
@@ -124,10 +125,10 @@ def parse_command_line(defaults):
         default=False,
     )
     parser.add_argument(
-        "--bill-input-dir",
-        help=f"The path where the bills are located. By default '{defaults['bill-input-dir']}'.",
+        "--bill-input",
+        help=f"The path where the bills are located. Either a directory where all bills will be processed or a file for just one bill. By default '{defaults['bill-input']}'.",
         required=False,
-        default=defaults["bill-input-dir"],
+        default=defaults["bill-input"],
     )
     parser.add_argument(
         "--bill-input-excludes",
@@ -162,6 +163,13 @@ def parse_command_line(defaults):
         help=f"Limit the number of files processed. By default '{defaults['limit']}' (-1 is no limit).",
         required=False,
         default=defaults["limit"],
+    )
+    parser.add_argument(
+        "--no-trim",
+        action="store_true",
+        help=f"Trim unwanted columns. Useful for debugging. Default to 'False'.",
+        required=False,
+        default=False,
     )
     parser.add_argument(
         "--dump",
@@ -210,27 +218,30 @@ def extract_bill_information(args):
     Returns:
         int: 1 if an error occurs (e.g., input directory does not exist or no files found), otherwise None.
     """
-    if not os.path.isdir(args.bill_input_dir):
-        logger.error(f"Input directory '{args.bill_input_dir}' does not exist.")
+    if not os.path.isdir(args.bill_input) and not os.path.isfile(args.bill_input):
+        logger.error(f"Input directory '{args.bill_input}' does not exist.")
         return 1
     if not args.no_refresh:
-        logger.info(f"Reading files from '{args.bill_input_dir}' ...")
+        logger.info(f"Reading files from '{args.bill_input}' ...")
     bill_input_excludes = [
         re.compile(bill_input_exclude)
         for bill_input_exclude in args.bill_input_excludes
     ]
-    files = [
-        full_path
-        for dp, dn, filenames in os.walk(args.bill_input_dir)
-        for pdf_filename in filenames
-        for full_path in [join(dp, pdf_filename)]
-        if pdf_filename.lower().endswith(".pdf")
-        and not any(regex.search(full_path) for regex in bill_input_excludes)
-    ]
+    if os.path.isfile(args.bill_input):
+        files = [args.bill_input]
+    else:
+        files = [
+            full_path
+            for dp, dn, filenames in os.walk(args.bill_input)
+            for pdf_filename in filenames
+            for full_path in [join(dp, pdf_filename)]
+            if pdf_filename.lower().endswith(".pdf")
+            and not any(regex.search(full_path) for regex in bill_input_excludes)
+        ]
     if not files:
-        logger.error(f"No files found in '{args.bill_input_dir}'.")
+        logger.error(f"No files found in '{args.bill_input}'.")
         return 1
-    logger.debug(f"Found {len(files)} files in '{args.bill_input_dir}'.")
+    logger.debug(f"Found {len(files)} files in '{args.bill_input}'.")
     if args.limit > 0:
         files = files[: args.limit]
         logger.warning(f"Limiting to {len(files)} files as per the --limit argument.")
@@ -244,7 +255,9 @@ def extract_bill_information(args):
                 with pdfplumber.open(file) as pdf:
                     for page in pdf.pages:
                         f.write(page.extract_text())
-        logger.info("Done dumping all files that would have been processed. Exiting.")
+        logger.info(
+            f"Dumped {len(files)} files to {basename(args.dump_output_prefix)}. Exiting."
+        )
         return
 
     if args.no_refresh:
@@ -263,13 +276,13 @@ def extract_bill_information(args):
             if not files:
                 logger.warning(f"No files found in '{args.load_input_dir}'.")
             else:
-                logger.debug(f"Found {len(files)} files in '{args.bill_input_dir}'.")
+                logger.debug(f"Found {len(files)} files in '{args.bill_input}'.")
                 if args.limit > 0:
                     files = files[: args.limit]
                     logger.warning(
                         f"Limiting to {len(files)} files as per the --limit argument."
                     )
-                loads = process_loads(args, files)
+                loads = extract_loads(args, files)
 
     wb = generate_report(args, bills, loads)
 
@@ -294,11 +307,7 @@ def extract_bills(args, files: list):
     """
     bills = {}
     for file in files:
-        bill_info = extract_dispatcher(
-            args.defaults["dispatchers"],
-            file,
-            ours=args.defaults["ours"]
-        )
+        bill_info = extract_dispatcher(args.defaults["dispatchers"], file, not args.no_trim)
         if not bill_info:
             continue
         bill_info = sanitize_bill(bill_info)
@@ -307,15 +316,13 @@ def extract_bills(args, files: list):
             continue
         bill_info["file"] = basename(file)
         cups = bill_info["cups"]
-        bill_info["contract_type"] = args.defaults["contract_types"].get(cups, "2.0")
-        bill_id = bill_info["bill_id"]
         if cups not in bills:
-            bills[cups] = {}
-        bills[cups][bill_id] = bill_info
+            bills[cups] = []
+        bills[cups].append(bill_info)
     return bills
 
 
-def extract_dispatcher(dispatchers: dict, file: str, ours: list):
+def extract_dispatcher(dispatchers: dict, file: str, trim: bool):
     """
     Extracts bill information by selecting and invoking the
     appropriate extractor function based on the content of
@@ -324,6 +331,7 @@ def extract_dispatcher(dispatchers: dict, file: str, ours: list):
     Args:
         dispatchers (dict): A dictionary mapping dispatcher names (str) to extractor function names (str).
         file (str): The path to the PDF file to be processed.
+        trim (bool): whether to trim unwanted columns.
 
     Returns:
         Any: The result of the extractor function if a matching dispatcher is found; otherwise, None.
@@ -343,20 +351,49 @@ def extract_dispatcher(dispatchers: dict, file: str, ours: list):
                 logger.debug(
                     f"Detected '{dispatcher}' bill. Using {extractor} to extract information ..."
                 )
-                bill_info = globals()[extractor](file, pdf, ours)
+                bill_info = globals()[extractor](pdf, trim)
                 return bill_info
         if not found_extractor:
             logger.error(f"Could not detect the type of bill for '{file}'. Skipping")
             return None, None, None
 
 
-def extract_nufri_bill(file, pdf, ours: list):
+def extract_plenitude_bill(pdf, trim: bool):
+    """Extractor for plenitude bills
+
+    Args:
+        pdf (PDFfile): The corresponding pdf file
+        trim (bool): whether to trim unwanted columns.
+
+    Returns:
+        dict: A dictionary containing the extracted bill information.
+    """
+    if not hasattr(extract_plenitude_bill, "re_table"):
+        extract_plenitude_bill.re_table = None
+    numeric_cols = [
+        "billed_amount",
+        "billed_energy",
+        "billed_power",
+        "P1",
+        "P2",
+        "P3",
+    ]
+    with open(
+        join(dirname(__file__), "assets/templates/es.plenitude.textfsm"),
+        "r",
+        encoding="utf-8",
+    ) as template:
+        extract_plenitude_bill.re_table = textfsm.TextFSM(template)
+    df = _extract_bill(pdf, extract_plenitude_bill.re_table, numeric_cols)
+    return df.iloc[0].to_dict()
+
+
+def extract_nufri_bill(pdf, trim: bool):
     """Extractor for Nufri bills
 
     Args:
-        file (str): The filename of the bill to analyze
         pdf (PDFfile): The corresponding pdf file
-        ours (list): a list of string that make sure the bill is actually ours...
+        trim (bool): whether to trim unwanted columns.
 
     Returns:
         dict: A dictionary containing the extracted bill information.
@@ -364,6 +401,7 @@ def extract_nufri_bill(file, pdf, ours: list):
     if not hasattr(extract_nufri_bill, "re_table"):
         extract_nufri_bill.re_table = None
 
+    # TODO: extract CPx information
     numeric_cols = [
         "billed_amount",
         "billed_energy",
@@ -378,27 +416,16 @@ def extract_nufri_bill(file, pdf, ours: list):
         encoding="utf-8",
     ) as template:
         extract_nufri_bill.re_table = textfsm.TextFSM(template)
-    pages = [page.extract_text() for page in pdf.pages]
-    headers = extract_nufri_bill.re_table.header
-    data = extract_nufri_bill.re_table.ParseText("\n".join(pages))
-    df = pd.DataFrame(data, columns=headers)
-    # Convert to float and fill with 0
-    df[numeric_cols] = df[numeric_cols].apply(
-        lambda serie: pd.to_numeric(
-            serie.astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False),
-            errors="coerce"
-        )
-    ).fillna(0)
+    df = _extract_bill(pdf, extract_nufri_bill.re_table, numeric_cols)
     return df.iloc[0].to_dict()
 
 
-def extract_te_bill(file, pdf, ours: list):
+def extract_te_bill(pdf, trim: bool):
     """Extractor for Total Energie bills
 
     Args:
-        file (str): The filename of the bill to analyze
         pdf (PDFfile): The corresponding pdf file
-        ours (list): a list of string that make sure the bill is actually ours...
+        trim (bool): whether to trim unwanted columns.
 
     Returns:
         dict: A dictionary containing the extracted bill information.
@@ -458,32 +485,42 @@ def extract_te_bill(file, pdf, ours: list):
         encoding="utf-8",
     ) as template:
         extract_te_bill.re_table = textfsm.TextFSM(template)
-    pages = [page.extract_text() for page in pdf.pages]
-    headers = extract_te_bill.re_table.header
-    data = extract_te_bill.re_table.ParseText("\n".join(pages))
-    df = pd.DataFrame(data, columns=headers)
-    # Convert to float and fill with 0
-    df[numeric_cols] = df[numeric_cols].apply(
-        lambda serie: pd.to_numeric(
-            serie.astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False),
-            errors="coerce"
-        )
-    ).fillna(0)
+    df = _extract_bill(pdf, extract_te_bill.re_table, numeric_cols)
     # Do some summing
-    df["billed_energy"] = df[[f"{prefix}{i}" for i in range(1, 7) for prefix in ("te_energy_access_P", "te_energy_P", "te_energy_charge_P")]].sum(axis=1)
-    df["billed_power"] = df[[f"{prefix}{i}" for i in range(1, 7) for prefix in ("te_power_access_P", "te_power_P", "te_power_charge_P")]].sum(axis=1)
+    df["billed_energy"] = df[
+        [
+            f"{prefix}{i}"
+            for i in range(1, 7)
+            for prefix in ("te_energy_access_P", "te_energy_P", "te_energy_charge_P")
+        ]
+    ].sum(axis=1)
+    df["billed_power"] = df[
+        [
+            f"{prefix}{i}"
+            for i in range(1, 7)
+            for prefix in ("te_power_access_P", "te_power_P", "te_power_charge_P")
+        ]
+    ].sum(axis=1)
+    # unfortunately te_contracted_power is not easily extractible
+    matches = re.findall(r"(P[1-6])\s+([\d,]+)", df["te_contracted_power"][0])
+    if matches:
+        for i in range(1, 7):
+            df[f"CP{i}"] = 0.0
+        for k, v in dict(matches).items():
+            df[f"C{k}"] = locale.atof(v)
     # Dropping all specific columns
-    df = df.loc[:, ~df.columns.str.startswith("te_")]
+    if trim:
+        logger.debug("Removing all specific te_* columns ...")
+        df = df.loc[:, ~df.columns.str.startswith("te_")]
     return df.iloc[0].to_dict()
 
 
-def extract_endesa_bill(file, pdf, ours: list):
+def extract_endesa_bill(pdf, trim: bool):
     """Extractor for Endesa bills
 
     Args:
-        file (str): The filename of the bill to analyze
         pdf (PDFfile): The corresponding pdf file
-        ours (list): a list of string that make sure the bill is actually ours...
+        trim (bool): whether to trim unwanted columns.
 
     Returns:
         dict: A dictionary containing the extracted bill information.
@@ -500,6 +537,12 @@ def extract_endesa_bill(file, pdf, ours: list):
         "P4",
         "P5",
         "P6",
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP4",
+        "CP5",
+        "CP6",
     ]
 
     with open(
@@ -508,27 +551,40 @@ def extract_endesa_bill(file, pdf, ours: list):
         encoding="utf-8",
     ) as template:
         extract_endesa_bill.re_table = textfsm.TextFSM(template)
-    pages = [page.extract_text() for page in pdf.pages]
-    headers = extract_endesa_bill.re_table.header
-    data = extract_endesa_bill.re_table.ParseText("\n".join(pages))
-    df = pd.DataFrame(data, columns=headers)
-    # Convert to float and fill with 0
-    df[numeric_cols] = df[numeric_cols].apply(
-        lambda serie: pd.to_numeric(
-            serie.astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False),
-            errors="coerce"
-        )
-    ).fillna(0)
+    df = _extract_bill(pdf, extract_endesa_bill.re_table, numeric_cols)
+    # I need to adjust the billing period end by -1 otherwise I
+    # overshoot the contracted power calculation. Except when it's
+    # just one day
+    # if df["billing_period_start"][0] != df["billing_period_end"][0]:
+        # XXX: check that is correct
+        # df["billing_period_end"][0] = df["billing_period_end"][0] - 1
+        # pass
+    matches = re.findall(
+        r"\s*(punta|punta-llano|valle)\s*([\d,]+)\s*kW;?",
+        df["endesa_contracted_power"][0],
+    )
+    if matches:
+        for i in range(1, 7):
+            df[f"CP{i}"] = 0.0
+        for k, v in dict(matches).items():
+            if k == "punta" or k == "punta-llano":
+                df[f"CP1"] = locale.atof(v)
+            elif k == "valle":
+                df[f"CP3"] = locale.atof(v)
+            else:
+                logger.warning(f"Unknown contracted power {k}")
+    # Dropping all specific columns
+    if trim:
+        df = df.loc[:, ~df.columns.str.startswith("endesa_")]
     return df.iloc[0].to_dict()
 
 
-def extract_qener_bill(file, pdf, ours: list):
+def extract_qener_bill(pdf, trim: bool):
     """Extractor for Qener bills
 
     Args:
-        file (str): The filename of the bill to analyze
         pdf (PDFfile): The corresponding pdf file
-        ours (list): a list of string that make sure the bill is actually ours...
+        trim (bool): whether to trim unwanted columns.
 
     Returns:
         dict: A dictionary containing the extracted bill information.
@@ -545,6 +601,12 @@ def extract_qener_bill(file, pdf, ours: list):
         "P4",
         "P5",
         "P6",
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP4",
+        "CP5",
+        "CP6",
     ]
     with open(
         join(dirname(__file__), "assets/templates/es.qener.textfsm"),
@@ -552,18 +614,29 @@ def extract_qener_bill(file, pdf, ours: list):
         encoding="utf-8",
     ) as template:
         extract_qener_bill.re_table = textfsm.TextFSM(template)
+    df = _extract_bill(pdf, extract_qener_bill.re_table, numeric_cols)
+    return df.iloc[0].to_dict()
+
+
+def _extract_bill(pdf, re_table, numeric_columns):
     pages = [page.extract_text() for page in pdf.pages]
-    headers = extract_qener_bill.re_table.header
-    data = extract_qener_bill.re_table.ParseText("\n".join(pages))
+    headers = re_table.header
+    data = re_table.ParseText("\n".join(pages))
     df = pd.DataFrame(data, columns=headers)
     # Convert to float and fill with 0
-    df[numeric_cols] = df[numeric_cols].apply(
-        lambda serie: pd.to_numeric(
-            serie.astype(str).str.replace(".", "", regex=False).str.replace(",", ".", regex=False),
-            errors="coerce"
+    df[numeric_columns] = (
+        df[numeric_columns]
+        .apply(
+            lambda serie: pd.to_numeric(
+                serie.astype(str)
+                .str.replace(".", "", regex=False)
+                .str.replace(",", ".", regex=False),
+                errors="coerce",
+            )
         )
-    ).fillna(0)
-    return df.iloc[0].to_dict()
+        .fillna(0)
+    )
+    return df
 
 
 def sanitize_bill(data: dict):
@@ -657,7 +730,7 @@ def _readable_path(path: str, max_len: int = 72) -> str:
     return f"{parts[0]}/.../{parts[-1]}"
 
 
-def process_loads(args, files: list):
+def extract_loads(args, files: list):
     loads = {}
     for file in files:
         with open(file, encoding="utf-8") as f:
@@ -741,13 +814,17 @@ def generate_report(args, bills: dict, loads: dict) -> Workbook:
         ws = wb.create_sheet(title=sheet_names.get(cups, cups))
         sheets[ws.title] = ws
 
-        # Add data to each worksheet
-        is_first_row = True
-        for bill_info in bill_infos.values():
-            if is_first_row:
-                ws.append(column_headers)
-                is_first_row = False
-            ws.append([bill_info.get(h, None) for h in column_keys])
+        # Enrich the report
+        if args.no_trim:
+            df = pd.DataFrame(bill_infos)
+        else:
+            df = pd.DataFrame(bill_infos, columns=column_keys)
+        df["gross_amount"] = df["billed_power"] + df["billed_energy"]
+        df = df.rename(columns=args.defaults["column_labels"])
+
+        # And write it in the worksheet
+        for row in dataframe_to_rows(df, index=False, header=True):
+            ws.append(row)
 
     ordered_sheets = []
     for title in args.defaults["sheet_names"].values():

@@ -14,6 +14,12 @@ Value P3 ([0-9,]+)
 Value P4 ([0-9,]+)
 Value P5 ([0-9,]+)
 Value P6 ([0-9,]+)
+Value CP1 ([0-9,]+)
+Value CP2 ([0-9,]+)
+Value CP3 ([0-9,]+)
+Value CP4 ([0-9,]+)
+Value CP5 ([0-9,]+)
+Value CP6 ([0-9,]+)
 
 Start
   ^Factura de electricidad -> FoundInvoice
@@ -34,6 +40,7 @@ QEEnery
   ^Facturación potencia contratada$$ -> QEPower
 
 QEPower
+  ^Potencia facturada kW\s+${CP1}\s+${CP2}\s+${CP3}\s+${CP4}\s+${CP5}\s+${CP6}
   ^Importe por potencia\s+.*\s+${billed_power}\s+€$$
   ^.*Impuesto Electricidad -> Record
 
