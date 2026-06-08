@@ -18,8 +18,8 @@ function formatAllSheets() {
   const sheets = spreadsheet.getSheets();
   sheets.forEach(sheet => {
     Logger.log("Processing sheet '" + sheet.getName() + "' ...");
-    if (['Constants'].includes(sheet.getName()) ||
-        ['Loads'].includes(sheet.getName())) {
+    if (sheet.getName().startsWith('Simulación') ||
+      ['Loads'].includes(sheet.getName())) {
       // Skipping...
     } else {
       const lastRow = sheet.getLastRow();
@@ -30,7 +30,9 @@ function formatAllSheets() {
       const energyIndices = ["P1", "P2", "P3", "P4", "P5", "P6"].map(p => columnIndices[p]);
       const powerIndices = ["CP1", "CP2", "CP3", "CP4", "CP5", "CP6"].map(p => columnIndices[p]);
 
+      // Do some cleanup
       removeAllCharts(sheet)
+      sheet.setConditionalFormatRules([]);
 
       // Setting format in order to allow for calculations
       setColumnFormat(sheet, columnIndices["Fecha de factura"], "date");
@@ -62,10 +64,11 @@ function formatAllSheets() {
       setColumnFormat(sheet, columnIndices[simulatedEnergy], "currency");
       setColumnFormat(sheet, columnIndices[simulatedGrossAmount], "currency");
 
+      // and the variation compared to the actuall value
       const simulatedVariation = "Simulación - Variation"
       const ciGrossAmount = columnIndices["Importe bruto"]
       const ciSimulatedGrossAmount = columnIndices[simulatedGrossAmount]
-      createSimulatedVariationColumn(sheet, ciGrossAmount, ciSimulatedGrossAmount, columnIndices,  simulatedVariation)
+      createSimulatedVariationColumn(sheet, ciGrossAmount, ciSimulatedGrossAmount, columnIndices, simulatedVariation)
       setColumnFormat(sheet, columnIndices[simulatedVariation], "percent");
 
       // Link with the files in Drive
@@ -75,6 +78,8 @@ function formatAllSheets() {
 
       sortByColumn(sheet, columnIndices["Inicio del periodo"])
 
+      // .filter(cl => columnIndices[cl] !== undefined)
+      // .forEach(cl => hideColumn(sheet, columnIndices[cl]));
       hideColumn(sheet, columnIndices["Fecha de factura"])
       hideColumn(sheet, columnIndices["P1"])
       hideColumn(sheet, columnIndices["P2"])
@@ -92,13 +97,6 @@ function formatAllSheets() {
       hideColumn(sheet, columnIndices["Fichero"])
       hideColumn(sheet, columnIndices[simulatedPower])
       hideColumn(sheet, columnIndices[simulatedEnergy])
-
-      // const contractType = sheet.getRange(2, columnIndices["Tipo de contrato"]).getValue();
-      // if (contractType == 2) {
-      //   ["P4", "P5", "P6"].forEach(function (columnName) {
-      //     hideColumn(sheet, columnIndices[columnName])
-      //   });
-      // }
 
       if (sheet.getLastRow() > 5) {
         createBilledAmountChart(sheet, columnIndices["Inicio del periodo"], columnIndices["Importe facturado"])
@@ -214,9 +212,9 @@ function createSimulatedColumns(sheet, energyIndices, powerIndices, columnIndice
     let energyFragments = []
     const clPowers = powerIndices.map(ci => ci)
     const clEnergies = energyIndices.map(ci => ci)
-    for (let j = 0 ; j < 6; j++) { // for each Px
-      powerFragments.push(`days*${nrP}P${j+1}*${index2Letter(clPowers[j])}${row}`);
-      energyFragments.push(`${nrE}P${j+1}*${index2Letter(clEnergies[j])}${row}`);
+    for (let j = 0; j < 6; j++) { // for each Px
+      powerFragments.push(`days*${nrP}P${j + 1}*${index2Letter(clPowers[j])}${row}`);
+      energyFragments.push(`${nrE}P${j + 1}*${index2Letter(clEnergies[j])}${row}`);
     }
     // power: number of days * price per kWh per day
     sheet.getRange(row, ciSimulatedPower).setFormula(`=LET(
@@ -255,6 +253,12 @@ function createSimulatedVariationColumn(sheet, ciGrossAmount, ciSimulatedGrossAm
   setConditionalFormatting(sheet, columnIndex)
 }
 
+/**
+ * Add conditional formatting to the given column.
+ * 
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet where the formatting will be applied.
+ * @param {number} columnIndex - The 1-based index of the column to format.
+ */
 function setConditionalFormatting(sheet, columnIndex) {
   const cl = index2Letter(columnIndex)
   const range = sheet.getRange(`${cl}2:${cl}`); // skip headers
@@ -267,14 +271,14 @@ function setConditionalFormatting(sheet, columnIndex) {
 
   // Rule for positive numbers - RED background
   const positiveRule = SpreadsheetApp.newConditionalFormatRule()
-    .whenNumberGreaterThan(0)
+    .whenNumberGreaterThan(0.01) // 0.xx% is still considered being 0
     .setBackground("#F4CCCC") // Light Red 3
     .setRanges([range])
     .build();
 
   // Rule for negative numbers - GREEN background
   const negativeRule = SpreadsheetApp.newConditionalFormatRule()
-    .whenNumberLessThan(0)
+    .whenNumberLessThan(-0.01)
     .setBackground("#D9EAD3") // Light Green 3
     .setRanges([range])
     .build();

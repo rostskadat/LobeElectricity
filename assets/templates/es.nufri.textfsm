@@ -8,9 +8,19 @@ Value cups (\S+)
 Value contract_type (\S+)
 Value billed_energy (-?[0-9\.]+,[0-9]{2})
 Value billed_power ([0-9]+,[0-9]{2})
-Value P1 ([0-9]+)
-Value P2 ([0-9]+)
-Value P3 ([0-9]+)
+Value P1 ([0-9,]+)
+Value P2 ([0-9,]+)
+Value P3 ([0-9,]+)
+Value P4 ([0-9,]+)
+Value P5 ([0-9,]+)
+Value P6 ([0-9,]+)
+Value CP1 ([0-9,]+)
+Value CP2 ([0-9,]+)
+Value CP3 ([0-9,]+)
+Value CP4 ([0-9,]+)
+Value CP5 ([0-9,]+)
+Value CP6 ([0-9,]+)
+Value nufri_contracted_power (.*)
 
 Start
   ^Factura Electricidad -> FoundInvoice
@@ -23,6 +33,7 @@ FoundInvoice
   ^Fecha de Factura:\s+${billing_date}
   ^Dirección:\s*${holder}
   ^Tarifa de Acceso:\s*${contract_type}
+  ^Potencia Contratada \(kW\):\s+${nufri_contracted_power}\s*
   ^CUPS:\s*${cups}
   ^Término Energía Libre$$ -> NufriEnergy
 

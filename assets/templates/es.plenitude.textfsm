@@ -14,26 +14,27 @@ Value P3 ([0-9,]+)
 Value P4 ([0-9,]+)
 Value P5 ([0-9,]+)
 Value P6 ([0-9,]+)
+Value CP1 ([0-9,]+)
+Value CP2 ([0-9,]+)
+Value CP3 ([0-9,]+)
+Value CP4 ([0-9,]+)
+Value CP5 ([0-9,]+)
+Value CP6 ([0-9,]+)
 
 Start
-  ^Factura de electricidad -> FoundInvoice
+  ^DATOS DE FACTURA DE ELECTRICIDAD -> FoundInvoice
 
 FoundInvoice
   ^IMPORTE FACTURA:\s+${billed_amount}\s+€
-  ^Nº Factura:\s+${bill_id}
-  ^Periodo de consumo:\s+${billing_period_start}\s+-\s+${billing_period_end}
-  ^Fecha de Factura:\s+${billing_date}
+  ^.*Nº de factura:\s*${bill_id}
+  ^.*Periodo de consumo:\s*${billing_period_start}\s+a\s+${billing_period_end}
+  ^.*Fecha de factura\s*:\s*${billing_date}
   ^Titular:${holder}
-  ^.*Tarifa de acceso:\s+${contract_type}
+  ^Peaje de acceso:\s+${contract_type}\s*Potencia contratada\s*P1:\s*${CP1}\s*kW\s*P2:\s*${CP2}\s*kW
   ^.*CUPS:\s+${cups}
-  ^Facturación energía consumida$$ -> QEEnery
+  ^Por potencia contratada:\s+${billed_power}\s+€
+  ^Por energía consumida:\s+${billed_energy}\s+€
+  ^Desglose del consumo facturado por periodo: P1:\s*${P1}\s*kWh;\s*P2:\s*${P2}\s*kWh;\s*P3:\s*${P3}\s*kWh;
 
-QEEnery
-  ^Consumo kWh\s+${P1}\s+${P2}\s+${P3}\s+${P4}\s+${P5}\s+${P6}
-  ^Importe por energía consumida\s+.*\s+${billed_energy}\s+€$$
-  ^Facturación potencia contratada$$ -> QEPower
 
-QEPower
-  ^Importe por potencia\s+.*\s+${billed_power}\s+€$$
-  ^.*Impuesto Electricidad -> Record
 

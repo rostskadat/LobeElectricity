@@ -306,7 +306,7 @@ def extract_bills(args, files: list):
         dict: a dict of CUPS/BILL_ID with all the extracted information
     """
     bills = {}
-    for file in files:
+    for file in sorted(files):
         bill_info = extract_dispatcher(args.defaults["dispatchers"], file, not args.no_trim)
         if not bill_info:
             continue
@@ -377,6 +377,15 @@ def extract_plenitude_bill(pdf, trim: bool):
         "P1",
         "P2",
         "P3",
+        "P4",
+        "P5",
+        "P6",
+        "CP1",
+        "CP2",
+        "CP3",
+        "CP4",
+        "CP5",
+        "CP6",
     ]
     with open(
         join(dirname(__file__), "assets/templates/es.plenitude.textfsm"),
@@ -409,6 +418,9 @@ def extract_nufri_bill(pdf, trim: bool):
         "P1",
         "P2",
         "P3",
+        "P4",
+        "P5",
+        "P6",
     ]
     with open(
         join(dirname(__file__), "assets/templates/es.nufri.textfsm"),
@@ -417,6 +429,17 @@ def extract_nufri_bill(pdf, trim: bool):
     ) as template:
         extract_nufri_bill.re_table = textfsm.TextFSM(template)
     df = _extract_bill(pdf, extract_nufri_bill.re_table, numeric_cols)
+    matches = re.findall(r"(P[1-6])\s+([\d,]+)\s+kW", df["nufri_contracted_power"][0])
+    if matches:
+        for i in range(1, 7):
+            df[f"CP{i}"] = 0.0
+        for k, v in dict(matches).items():
+            df[f"C{k}"] = locale.atof(v)
+    # Dropping all specific columns
+    if trim:
+        logger.debug("Removing all specific nufri_* columns ...")
+        df = df.loc[:, ~df.columns.str.startswith("nufri_")]
+
     return df.iloc[0].to_dict()
 
 

@@ -1,10 +1,10 @@
-bill-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Comunidad/Electricidad
-output: bills-Comunidad.xlsx
-gsheet-id: 1uErkSzfxNqFBKGpsOlhQtoNOp7euY6erFWEdxtt32fc
+# bill-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Comunidad/Electricidad
+# output: bills-Comunidad.xlsx
+# gsheet-id: 1uErkSzfxNqFBKGpsOlhQtoNOp7euY6erFWEdxtt32fc
 
-# bill-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Contrato Electricidad/2024
-# output: bills-E74A.xlsx
-# gsheet-id: 1nKrjqB1AHhA3br43rSfknFwhRWDx48SX5D9khpohulo
+bill-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Contrato Electricidad
+output: bills-E74A.xlsx
+gsheet-id: 1nKrjqB1AHhA3br43rSfknFwhRWDx48SX5D9khpohulo
 
 # bill-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/CONDES DE ARAGÓN 36 ZARAGOZA/Facturas/Endesa
 # output: bills-CondesDeAragon36.xlsx
@@ -22,10 +22,11 @@ locale: es_ES.utf8
 limit: -1
 # Detect the emissor of the bill, and extract accordingly
 dispatchers:
-  "Energia Nufri S.L.U.": extract_nufri_bill
+  "500015114224": extract_nufri_bill
   "A81948077": extract_endesa_bill
   "A87803862": extract_te_bill
   "900 101 142": extract_qener_bill
+  "B39793294": extract_plenitude_bill
 # The localized column label. The key corresponds to the dict key while the value
 #   is the label used in the Excel sheet
 # BEWARE: The columns in the Excel sheet will be in the same order as the keys
