@@ -195,6 +195,7 @@ cython_debug/
 
 bills
 *.xlsx
-consumption/*.csv
-
+consumption
+output
 service-account.json
+cached-bills.db

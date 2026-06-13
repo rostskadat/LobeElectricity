@@ -1,3 +1,32 @@
+// KEEP IT SYNC WITH default.yaml
+
+const cl_bill_id = "Nº de factura"
+const cl_billing_date = "Fecha de factura"
+const cl_billing_period_start = "Inicio del periodo"
+const cl_billing_period_end = "Fin del periodo"
+const cl_billed_power = "Potencia"
+const cl_billed_energy = "Energía"
+const cl_gross_amount = "Importe bruto"
+const cl_billed_amount = "Importe facturado"
+const cl_P1 = "P1"
+const cl_P2 = "P2"
+const cl_P3 = "P3"
+const cl_P4 = "P4"
+const cl_P5 = "P5"
+const cl_P6 = "P6"
+const cl_CP1 = "CP1"
+const cl_CP2 = "CP2"
+const cl_CP3 = "CP3"
+const cl_CP4 = "CP4"
+const cl_CP5 = "CP5"
+const cl_CP6 = "CP6"
+const cl_contract_type = "Tipo de contrato"
+const cl_file = "Fichero"
+const cl_simulated_power = "Simulación - Potencia"
+const cl_simulated_energy = "Simulación - Energía"
+const cl_simulated_gross_amount = "Simulación - Importe bruto"
+const cl_simulated_variation = "Simulación - Variation"
+
 /**
  * Formats all non-empty sheets in the active Google Spreadsheet according to predefined rules.
  *
@@ -26,81 +55,64 @@ function formatAllSheets() {
       if (lastRow === 0) return; // Skip empty sheets
 
       // get a map of column indices
-      const columnIndices = getColumnIndices(sheet)
-      const energyIndices = ["P1", "P2", "P3", "P4", "P5", "P6"].map(p => columnIndices[p]);
-      const powerIndices = ["CP1", "CP2", "CP3", "CP4", "CP5", "CP6"].map(p => columnIndices[p]);
+      const columns = getColumns(sheet)
+      const columnsIndices = getColumnIndices(sheet)
 
       // Do some cleanup
       removeAllCharts(sheet)
       sheet.setConditionalFormatRules([]);
 
       // Setting format in order to allow for calculations
-      setColumnFormat(sheet, columnIndices["Fecha de factura"], "date");
-      setColumnFormat(sheet, columnIndices["Inicio del periodo"], "date");
-      setColumnFormat(sheet, columnIndices["Fin del periodo"], "date");
-      setColumnFormat(sheet, columnIndices["Potencia"], "currency");
-      setColumnFormat(sheet, columnIndices["Energía"], "currency");
-      setColumnFormat(sheet, columnIndices["Importe bruto"], "currency");
-      setColumnFormat(sheet, columnIndices["Importe facturado"], "currency");
-      setColumnFormat(sheet, columnIndices["P1"], "energy");
-      setColumnFormat(sheet, columnIndices["P2"], "energy");
-      setColumnFormat(sheet, columnIndices["P3"], "energy");
-      setColumnFormat(sheet, columnIndices["P4"], "energy");
-      setColumnFormat(sheet, columnIndices["P5"], "energy");
-      setColumnFormat(sheet, columnIndices["P6"], "energy");
-      setColumnFormat(sheet, columnIndices["CP1"], "power");
-      setColumnFormat(sheet, columnIndices["CP2"], "power");
-      setColumnFormat(sheet, columnIndices["CP3"], "power");
-      setColumnFormat(sheet, columnIndices["CP4"], "power");
-      setColumnFormat(sheet, columnIndices["CP5"], "power");
-      setColumnFormat(sheet, columnIndices["CP6"], "power");
+      setColumnFormat(sheet, columns[cl_billing_date], "date")
+      setColumnFormat(sheet, columns[cl_billing_period_start], "date")
+      setColumnFormat(sheet, columns[cl_billing_period_end], "date")
+      setColumnFormat(sheet, columns[cl_billed_power], "currency")
+      setColumnFormat(sheet, columns[cl_billed_energy], "currency")
+      setColumnFormat(sheet, columns[cl_gross_amount], "currency")
+      setColumnFormat(sheet, columns[cl_billed_amount], "currency")
+      const energyColumns = [cl_P1, cl_P2, cl_P3, cl_P4, cl_P5, cl_P6].map(cl => columns[cl]);
+      const energyIndices = [cl_P1, cl_P2, cl_P3, cl_P4, cl_P5, cl_P6].map(cl => columnsIndices[cl]);
+      energyColumns.forEach((c, i) => setColumnFormat(sheet, c, "energy"))
 
-      // calculate the simulated gross amount
-      const simulatedPower = "Simulación - Potencia"
-      const simulatedEnergy = "Simulación - Energía"
-      const simulatedGrossAmount = "Simulación - Importe bruto"
-      createSimulatedColumns(sheet, energyIndices, powerIndices, columnIndices, simulatedPower, simulatedEnergy, simulatedGrossAmount)
-      setColumnFormat(sheet, columnIndices[simulatedPower], "currency");
-      setColumnFormat(sheet, columnIndices[simulatedEnergy], "currency");
-      setColumnFormat(sheet, columnIndices[simulatedGrossAmount], "currency");
+      const powerColumns = [cl_CP1, cl_CP2, cl_CP3, cl_CP4, cl_CP5, cl_CP6].map(cl => columns[cl]);
+      powerColumns.forEach((c, i) => setColumnFormat(sheet, c, "power"))
 
-      // and the variation compared to the actuall value
-      const simulatedVariation = "Simulación - Variation"
-      const ciGrossAmount = columnIndices["Importe bruto"]
-      const ciSimulatedGrossAmount = columnIndices[simulatedGrossAmount]
-      createSimulatedVariationColumn(sheet, ciGrossAmount, ciSimulatedGrossAmount, columnIndices, simulatedVariation)
-      setColumnFormat(sheet, columnIndices[simulatedVariation], "percent");
+      // creating simulated columns...
+      createSimulatedColumns(sheet, columns, columnsIndices, energyColumns, powerColumns)
+      setColumnFormat(sheet, columns[cl_simulated_power], "currency");
+      setColumnFormat(sheet, columns[cl_simulated_energy], "currency");
+      setColumnFormat(sheet, columns[cl_simulated_gross_amount], "currency");
+      setColumnFormat(sheet, columns[cl_simulated_variation], "percent");
 
       // Link with the files in Drive
-      createLinks(sheet, columnIndices["Nº de factura"], columnIndices["Fichero"])
+      createLinks(sheet, columnsIndices[cl_bill_id], columnsIndices[cl_file])
 
       freezeColumn(sheet, 3)
 
-      sortByColumn(sheet, columnIndices["Inicio del periodo"])
+      sortByColumn(sheet, columnsIndices[cl_billing_period_start])
 
-      // .filter(cl => columnIndices[cl] !== undefined)
-      // .forEach(cl => hideColumn(sheet, columnIndices[cl]));
-      hideColumn(sheet, columnIndices["Fecha de factura"])
-      hideColumn(sheet, columnIndices["P1"])
-      hideColumn(sheet, columnIndices["P2"])
-      hideColumn(sheet, columnIndices["P3"])
-      hideColumn(sheet, columnIndices["P4"])
-      hideColumn(sheet, columnIndices["P5"])
-      hideColumn(sheet, columnIndices["P6"])
-      hideColumn(sheet, columnIndices["CP1"])
-      hideColumn(sheet, columnIndices["CP2"])
-      hideColumn(sheet, columnIndices["CP3"])
-      hideColumn(sheet, columnIndices["CP4"])
-      hideColumn(sheet, columnIndices["CP5"])
-      hideColumn(sheet, columnIndices["CP6"])
-      hideColumn(sheet, columnIndices["Tipo de contrato"])
-      hideColumn(sheet, columnIndices["Fichero"])
-      hideColumn(sheet, columnIndices[simulatedPower])
-      hideColumn(sheet, columnIndices[simulatedEnergy])
+
+      hideColumn(sheet, columnsIndices[cl_billing_date])
+      hideColumn(sheet, columnsIndices[cl_P1])
+      hideColumn(sheet, columnsIndices[cl_P2])
+      hideColumn(sheet, columnsIndices[cl_P3])
+      hideColumn(sheet, columnsIndices[cl_P4])
+      hideColumn(sheet, columnsIndices[cl_P5])
+      hideColumn(sheet, columnsIndices[cl_P6])
+      hideColumn(sheet, columnsIndices[cl_CP1])
+      hideColumn(sheet, columnsIndices[cl_CP2])
+      hideColumn(sheet, columnsIndices[cl_CP3])
+      hideColumn(sheet, columnsIndices[cl_CP4])
+      hideColumn(sheet, columnsIndices[cl_CP5])
+      hideColumn(sheet, columnsIndices[cl_CP6])
+      hideColumn(sheet, columnsIndices[cl_contract_type])
+      hideColumn(sheet, columnsIndices[cl_file])
+      hideColumn(sheet, columnsIndices[cl_simulated_power])
+      hideColumn(sheet, columnsIndices[cl_simulated_energy])
 
       if (sheet.getLastRow() > 5) {
-        createBilledAmountChart(sheet, columnIndices["Inicio del periodo"], columnIndices["Importe facturado"])
-        createPowerDistributionChart(sheet, columnIndices["Inicio del periodo"], energyIndices)
+        createBilledAmountChart(sheet, columns[cl_billing_period_start], columns[cl_billed_amount])
+        createPowerDistributionChart(sheet, columns[cl_billing_period_start], energyIndices)
       } else {
         Logger.log("Skipping graphs for sheet '" + sheet.getName() + "': not enough data");
       }
@@ -124,44 +136,49 @@ function getColumnIndices(sheet) {
   return headerMap;
 }
 
+function getColumns(sheet) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const headerMap = {};
+  headers.forEach((header, index) => {
+    headerMap[header] = index2Column(index + 1);  // 1-based column index
+  });
+  return headerMap;
+
+}
 
 /**
  * Applies a specific number format to a column in a Google Sheets sheet based on the given column type.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet where the formatting will be applied.
- * @param {number} columnIndex - The 1-based index of the column to format.
+ * @param {string} column - The column definition (i.e. C2:C)
  * @param {string} columnType - The type of formatting to apply. Supported values: "power", "currency", "number", "date".
  * @throws {Error} Throws an error if an unsupported column type is provided.
  */
-function setColumnFormat(sheet, columnIndex, columnType) {
-  // if (columnIndex == null) {
-  //   return
-  // }
-  const numRows = sheet.getLastRow();
-  const columnRange = sheet.getRange(2, columnIndex, numRows - 1); // Exclude header row
+function setColumnFormat(sheet, column, columnType) {
+  const range = sheet.getRange(column);
 
   // Apply formatting based on the columnType
   switch (columnType.toLowerCase()) {
     case "energy":
-      columnRange.setNumberFormat("#,##0.00\" kWh\"");
+      range.setNumberFormat("#,##0.00\" kWh\"");
       break;
     case "power":
-      columnRange.setNumberFormat("#,##0.000\" kWh\"");
+      range.setNumberFormat("#,##0.000\" kWh\"");
       break;
     case "currency":
-      columnRange.setNumberFormat("#,##0.00 €");
+      range.setNumberFormat("#,##0.00 €");
       break;
     case "number":
-      columnRange.setNumberFormat("0.00");
+      range.setNumberFormat("0.00");
       break;
     case "datetime":
-      columnRange.setNumberFormat("yyyy-MM-dd HH:00");
+      range.setNumberFormat("yyyy-MM-dd HH:00");
       break;
     case "date":
-      columnRange.setNumberFormat("yyyy-MM-dd");
+      range.setNumberFormat("yyyy-MM-dd");
       break;
     case "percent":
-      columnRange.setNumberFormat("0.00%");
+      range.setNumberFormat("0.00%");
       break;
     default:
       throw new Error(`Unsupported column type: ${columnType}`);
@@ -179,89 +196,81 @@ function setColumnFormat(sheet, columnIndex, columnType) {
 /**
  * Create the simulated columns...
  */
-function createSimulatedColumns(sheet, energyIndices, powerIndices, columnIndices, simulatedPower, simulatedEnergy, simulatedGrossAmount) {
-  if (energyIndices.some(i => i === -1)) {
-    throw new Error("One or more required columns (P1 to P6) not found.");
-  }
-  if (powerIndices.some(i => i === -1)) {
-    throw new Error("One or more required columns (CP1 to CP6) not found.");
-  }
-
-  // Add a new header for the each column
-  for (const columnName of [simulatedPower, simulatedEnergy, simulatedGrossAmount]) {
-    let columnIndex = columnIndices[columnName]
-    if (columnIndex === undefined || columnIndex === -1) {
+function createSimulatedColumns(sheet, columns, columnsIndices, energyColumns, powerColumns) {
+  // Add a new header for the each simulated columns
+  for (const columnName of [cl_simulated_power, cl_simulated_energy, cl_simulated_gross_amount, cl_simulated_variation]) {
+    let column = columns[columnName]
+    if (column === undefined || column === -1) {
       sheet.getRange(1, sheet.getLastColumn() + 1).setValue(columnName);
       columnIndex = sheet.getLastColumn();
-      columnIndices[columnName] = columnIndex
+      columnsIndices[columnName] = columnIndex;
+      columns[columnName] = index2Column(columnIndex);
     }
   }
 
-  const clContractType = index2Letter(columnIndices["Tipo de contrato"])
-  // we assume the contract type does not change from one bill to the next
-  const contractType = sheet.getRange(`${clContractType}2`).getValue();
-  const ciSimulatedPower = columnIndices[simulatedPower]
-  const ciSimulatedEnergy = columnIndices[simulatedEnergy]
-  const ciSimulatedGrossAmount = columnIndices[simulatedGrossAmount]
+  const columnBPS = columns[cl_billing_period_start]
+  const columnBPE = columns[cl_billing_period_end]
 
-  // Calculate the simulated value ...
-  for (let row = 2; row <= sheet.getLastRow(); row++) { // skip headers
-    const nrP = contractType === "2.0TD" ? "PP2" : "PP3"
-    const nrE = contractType === "2.0TD" ? "EP2" : "EP3"
-    let powerFragments = []
-    let energyFragments = []
-    const clPowers = powerIndices.map(ci => ci)
-    const clEnergies = energyIndices.map(ci => ci)
-    for (let j = 0; j < 6; j++) { // for each Px
-      powerFragments.push(`days*${nrP}P${j + 1}*${index2Letter(clPowers[j])}${row}`);
-      energyFragments.push(`${nrE}P${j + 1}*${index2Letter(clEnergies[j])}${row}`);
-    }
-    // power: number of days * price per kWh per day
-    sheet.getRange(row, ciSimulatedPower).setFormula(`=LET(
-      days; D${row}-C${row}+1;
-      ${powerFragments.join(" + ")}
-    )`);
-    // energy
-    sheet.getRange(row, ciSimulatedEnergy).setFormula(`=${energyFragments.join(" + ")}`);
-    // sum of both
-    sheet.getRange(row, ciSimulatedGrossAmount).setFormula(`=${index2Letter(ciSimulatedPower)}${row} + ${index2Letter(ciSimulatedEnergy)}${row}`);
-  }
-}
+  const columnCT = columns[cl_contract_type]
+  const contractType = sheet.getRange(`${columnCT}2`).getValue();
 
-function createSimulatedVariationColumn(sheet, ciGrossAmount, ciSimulatedGrossAmount, columnIndices, columnName) {
-  // Add a new header for the calculated column
-  let columnIndex = columnIndices[columnName]
-  if (columnIndex === undefined || columnIndex === -1) {
-    sheet.getRange(1, sheet.getLastColumn() + 1).setValue(columnName);
-    columnIndex = sheet.getLastColumn();
-    columnIndices[columnName] = columnIndex
-  }
+  const nrP = contractType === "2.0TD" ? "PP2" : "PP3"
+  const formulaSimulatedPower = `=ARRAYFORMULA(
+    IF(${columnBPS}="";;
+      LET(
+        days; ${columnBPE} - ${columnBPS} + 1;
+        days*${nrP}P1*${powerColumns[0]} + 
+        days*${nrP}P2*${powerColumns[1]} + 
+        days*${nrP}P3*${powerColumns[2]} + 
+        days*${nrP}P4*${powerColumns[3]} + 
+        days*${nrP}P5*${powerColumns[4]} + 
+        days*${nrP}P6*${powerColumns[5]}
+      )
+    )
+  )
+  `
+  const nrE = contractType === "2.0TD" ? "EP2" : "EP3"
+  const formulaSimulatedEnergy = `=ARRAYFORMULA(
+    ${nrE}P1*${energyColumns[0]} + 
+    ${nrE}P2*${energyColumns[1]} + 
+    ${nrE}P3*${energyColumns[2]} + 
+    ${nrE}P4*${energyColumns[3]} + 
+    ${nrE}P5*${energyColumns[4]} + 
+    ${nrE}P6*${energyColumns[5]}
+  )
+  `
 
-  // Calculate the variation of the Energy cost...
-  for (let row = 2; row <= sheet.getLastRow(); row++) { // skip headers
-    const clGrossAmount = index2Letter(ciGrossAmount)
-    const clSimulatedGrossAmount = index2Letter(ciSimulatedGrossAmount)
-    const formulaValue = `(${clSimulatedGrossAmount}${row} / ${clGrossAmount}${row}) - 1`
-    const formula = `=IFERROR(${formulaValue}; "")`;
-    sheet.getRange(row, columnIndex).setFormula(formula);
-  }
+  const columnSP = columns[cl_simulated_power];
+  const columnSE = columns[cl_simulated_energy];
+  const formulaSimulatedGrossAmount = `=ARRAYFORMULA(
+    ${columnSP} + ${columnSE}
+  )
+  `
+  const columnSGA = columns[cl_simulated_gross_amount]
+  const columnGA = columns[cl_gross_amount]
+  const formulaSimulatedVariation = `=ARRAYFORMULA(
+    IFERROR((${columnSGA} / ${columnGA}) - 1; "")
+  )
+  `
+  const columnSV = columns[cl_simulated_variation]
+  sheet.getRange(`${columnSP}2`).setFormula(formulaSimulatedPower);
+  sheet.getRange(`${columnSE}2`).setFormula(formulaSimulatedEnergy);
+  sheet.getRange(`${columnSGA}2`).setFormula(formulaSimulatedGrossAmount);
+  sheet.getRange(`${columnSV}2`).setFormula(formulaSimulatedVariation);
 
-  range = sheet.getRange(`${index2Letter(columnIndex)}2:${index2Letter(columnIndex)}${sheet.getLastRow()}`); // skip headers
+  range = sheet.getRange(columnSV);
   range.setNote("Indica la variation del importe bruto de la factura entre la antigua tarifa y la nueva");
-
-  // apply conditional formating
-  setConditionalFormatting(sheet, columnIndex)
+  setConditionalFormatting(sheet, columnSV)
 }
 
 /**
  * Add conditional formatting to the given column.
  * 
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet where the formatting will be applied.
- * @param {number} columnIndex - The 1-based index of the column to format.
+ * @param {string} column - The column specification (i.e. C2:C)
  */
-function setConditionalFormatting(sheet, columnIndex) {
-  const cl = index2Letter(columnIndex)
-  const range = sheet.getRange(`${cl}2:${cl}`); // skip headers
+function setConditionalFormatting(sheet, column) {
+  const range = sheet.getRange(column);
 
   // Clear existing rules
   const rules = sheet.getConditionalFormatRules().filter(rule => {
@@ -302,6 +311,12 @@ function index2Letter(columnIndex) {
     columnIndex = Math.floor((columnIndex - 1) / 26);
   }
   return columnLetter;
+}
+
+function index2Column(columnIndex) {
+  const columnLetter = index2Letter(columnIndex);
+  const column = `${columnLetter}2:${columnLetter}`
+  return column
 }
 
 /**
@@ -349,8 +364,8 @@ function sortByColumn(sheet, columnIndex, ascending = true) {
  * and inserting a HYPERLINK formula in the specified column.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet where links will be created.
- * @param {number} ciBillId - The column index where the hyperlink will be set (1-based).
- * @param {number} ciPdfFile - The column index containing the PDF file names (1-based).
+ * @param {string} columnBillId - The column where the hyperlink will be set (1-based).
+ * @param {string} columnPdfFile - The column containing the PDF file names (1-based).
  */
 function createLinks(sheet, ciBillId, ciPdfFile) {
   if (ciBillId == null) {
@@ -396,18 +411,14 @@ function removeAllCharts(sheet) {
  * Creates and inserts a column chart in the given Google Sheets sheet, visualizing billed amounts per billing period.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet where the chart will be inserted.
- * @param {number} ciBillingPeriodStart - The column index (1-based) for the billing period start data.
- * @param {number} ciBilledAmount - The column index (1-based) for the billed amount data.
+ * @param {string} clBillingPeriodStart - The column for the billing period start data (i.e. C2:C).
+ * @param {string} clBilledAmount - The column for the billed amount data (i.e. C2:C).
  *
  * @returns {void}
  */
-function createBilledAmountChart(sheet, ciBillingPeriodStart, ciBilledAmount) {
-  const clDomain = index2Letter(ciBillingPeriodStart)
-  const clData = index2Letter(ciBilledAmount)
-
-  const numRows = sheet.getLastRow();
-  const domainRange = sheet.getRange(`${clDomain}1:${clDomain}${numRows}`); // skip headers
-  const dataRange = sheet.getRange(`${clData}1:${clData}${numRows}`);
+function createBilledAmountChart(sheet, clBillingPeriodStart, clBilledAmount) {
+  const domainRange = sheet.getRange(clBillingPeriodStart); // skip headers
+  const dataRange = sheet.getRange(clBilledAmount);
 
   const chart = sheet.newChart()
     .setChartType(Charts.ChartType.COLUMN)
@@ -430,17 +441,17 @@ function createBilledAmountChart(sheet, ciBillingPeriodStart, ciBilledAmount) {
  * into the given Google Sheets sheet.
  *
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - The sheet where the chart will be inserted.
- * @param {number} ciBillingPeriodStart - The column index for the billing period start (domain axis).
+ * @param {string} ciBillingPeriodStart - The column for the billing period start (domain axis) (i.e. C2:C).
  * @param {number[]} energyIndices - Array of column indices representing power data series.
  */
-function createPowerDistributionChart(sheet, ciBillingPeriodStart, energyIndices) {
-  const clDomain = index2Letter(ciBillingPeriodStart)
-  const clDataStart = index2Letter(energyIndices[0])
-  const clDataEnd = index2Letter(energyIndices[energyIndices.length - 1])
+function createPowerDistributionChart(sheet, clBillingPeriodStart, energyIndices) {
+  const domainRange = sheet.getRange(clBillingPeriodStart); // skip headers
 
-  const numRows = sheet.getLastRow();
-  const domainRange = sheet.getRange(`${clDomain}1:${clDomain}${numRows}`); // skip headers
-  const dataRange = sheet.getRange(`${clDataStart}1:${clDataEnd}${numRows}`);
+  const columnStart = index2Letter(energyIndices[0])
+  const columnEnd = index2Letter(energyIndices[energyIndices.length - 1])
+  const rowStart = 1;
+  const rowEnd = sheet.getLastRow();
+  const dataRange = sheet.getRange(`${columnStart}${rowStart}:${columnEnd}${rowEnd}`);
 
   const chart = sheet.newChart()
     .setChartType(Charts.ChartType.COLUMN)

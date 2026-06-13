@@ -1,25 +1,29 @@
-# bill-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Comunidad/Electricidad
-# output: bills-Comunidad.xlsx
-# gsheet-id: 1uErkSzfxNqFBKGpsOlhQtoNOp7euY6erFWEdxtt32fc
+bill-input: /home/rostskadat/Documents/Villa Verde Casa II/Comunidad/Electricidad
+workbook: bills-Comunidad.xlsx
+gsheet-id: 1uErkSzfxNqFBKGpsOlhQtoNOp7euY6erFWEdxtt32fc
 
-bill-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/Villa Verde Casa II/Contrato Electricidad
-output: bills-E74A.xlsx
-gsheet-id: 1nKrjqB1AHhA3br43rSfknFwhRWDx48SX5D9khpohulo
+# bill-input: /home/rostskadat/Documents/Villa Verde Casa II/Contrato Electricidad
+# workbook: bills-E74A.xlsx
+# gsheet-id: 1nKrjqB1AHhA3br43rSfknFwhRWDx48SX5D9khpohulo
 
 # bill-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/CONDES DE ARAGÓN 36 ZARAGOZA/Facturas/Endesa
-# output: bills-CondesDeAragon36.xlsx
+# workbook: bills-CondesDeAragon36.xlsx
 # gsheet-id: xxxxxxxxxxxxx
+
 bill-input-excludes:
   - "Simulation - Plenitude/.*"
   - "Simulation - Qener/.*"
   - "Paneles/.*"
   - ".*/Contracts/.*"
   - "ES0031300855112011HB0F - Piscina/.*"
-load-input-dir: consumption
-dump-output-prefix: dump-
 include-loads: False
+load-input: consumption
+load-input-excludes: []
+dump-prefix: dump-
 locale: es_ES.utf8
 limit: -1
+cache-file: cached-bills.db
+credentials: service-account.json
 # Detect the emissor of the bill, and extract accordingly
 dispatchers:
   "500015114224": extract_nufri_bill

@@ -5,5 +5,8 @@ python-dotenv==1.0.1
 PyYAML==6.0.1
 pandas==3.0.3
 gspread==6.2.1
+gspread-dataframe==4.0.0
 google-api-python-client==2.197.0
 textfsm==2.1.0
+tqdm==4.68.2
+pysqlite3==0.6.0

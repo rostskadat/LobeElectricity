@@ -14,7 +14,6 @@ Value P3 ([0-9\.]+,[0-9]+)
 Value P4 ([0-9\.]+,[0-9]+)
 Value P5 ([0-9\.]+,[0-9]+)
 Value P6 ([0-9\.]+,[0-9]+)
-Value endesa_contracted_power (.*)
 Value CP1 ([0-9,]+)
 Value CP2 ([0-9,]+)
 Value CP3 ([0-9,]+)
@@ -37,7 +36,6 @@ FoundInvoice
   ^Titular del contrato:\s*${holder}\s+Número de contador:
   ^.*(Peaje de transporte y distribución|Peajedetransporteydistribución):\s*${contract_type}
   ^CUPS:\s+${cups}\s+.*
-  ^(Potencias contratadas|Potenciascontratadas):\s*${endesa_contracted_power}
   ^DETALLE ?DE ?LA ?FACTURA -> EndesaDetails
 
 EndesaDetails
