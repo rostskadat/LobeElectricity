@@ -1,4 +1,4 @@
-Value holder (CDAD ?PROP ?ANDADOR ?CAMPANILLA)
+Value holder (CDAD ?PROP ?ANDADOR ?CAMPANILLA|MARTA ?RODRIGUEZ ?QUIJANO)
 Value billed_amount (-?[0-9\.]+,[0-9]+)
 Value bill_id (\S+)
 Value billing_date (\d{2}/\d{2}/\d{4})

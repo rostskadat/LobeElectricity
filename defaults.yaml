@@ -1,14 +1,14 @@
-bill-input: /home/rostskadat/Documents/Villa Verde Casa II/Comunidad/Electricidad
-workbook: bills-Comunidad.xlsx
-gsheet-id: 1uErkSzfxNqFBKGpsOlhQtoNOp7euY6erFWEdxtt32fc
+# bill-input: /home/rostskadat/Documents/Villa Verde Casa II/Comunidad/Electricidad
+# workbook: bills-Comunidad.xlsx
+# gsheet-id: 1uErkSzfxNqFBKGpsOlhQtoNOp7euY6erFWEdxtt32fc
 
 # bill-input: /home/rostskadat/Documents/Villa Verde Casa II/Contrato Electricidad
 # workbook: bills-E74A.xlsx
 # gsheet-id: 1nKrjqB1AHhA3br43rSfknFwhRWDx48SX5D9khpohulo
 
-# bill-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/CONDES DE ARAGÓN 36 ZARAGOZA/Facturas/Endesa
-# workbook: bills-CondesDeAragon36.xlsx
-# gsheet-id: xxxxxxxxxxxxx
+bill-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/CONDES DE ARAGÓN 36 ZARAGOZA/Facturas/Endesa
+workbook: bills-CondesDeAragon36.xlsx
+gsheet-id: 1xpdbEPHdBmzSODDW61rtfWAgy0GL2A16av7SkxH4RJA
 
 bill-input-excludes:
   - "Simulation - Plenitude/.*"

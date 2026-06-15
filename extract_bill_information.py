@@ -267,7 +267,7 @@ def extract_bill_information(args: Namespace):
             return 1
 
         if args.dump:
-            _dump_bills(args.dump_prefix, bills)
+            _dump_bills(args.dump_prefix, bill_files)
             return 0
 
         bills = _extract_bills(args, bill_files)
@@ -353,23 +353,23 @@ def _list_files_with_extension(input: str, excludes: list, extension: str):
     return files
 
 
-def _dump_bills(dump_prefix: str, bills: list):
+def _dump_bills(dump_prefix: str, bill_files: list):
     """Dump extracted text from a list of bills to a specific folder
 
     Args:
         dump_prefix (str): the output prefix
-        bills (list): the list of pdf files to extract and dump
+        bill_files (list): the list of pdf files to extract and dump
     """
-    for bill in bills:
-        logger.info(bill)
+    for bill_file in bill_files:
+        logger.info(bill_file)
         with open(
-            f"{dump_prefix}{basename(bill).replace(".pdf", "")}.txt", "w", encoding="utf-8"
+            f"{dump_prefix}{basename(bill_file).replace(".pdf", "")}.txt", "w", encoding="utf-8"
         ) as f:
-            with pdfplumber.open(bill) as pdf:
+            with pdfplumber.open(bill_file) as pdf:
                 for page in pdf.pages:
                     f.write(page.extract_text())
     logger.info(
-        f"Dumped {len(bills)} bills to {dirname(dump_prefix)}"
+        f"Dumped {len(bill_files)} bills to {dirname(dump_prefix)}"
     )
 
 
@@ -715,9 +715,20 @@ def _extract_bill(pdf: pdfplumber.PDF, re_table: textfsm.TextFSM, numeric_column
         dict: the extracted information
     """
     pages = [page.extract_text() for page in pdf.pages]
-    headers = re_table.header
+    header = re_table.header
+    
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(re_table.states)
+        logger.debug(re_table.header)
+        original = textfsm.TextFSM._CheckLine
+        def debug_checkline(self, line):
+            logger.debug(f"STATE={self._cur_state_name}")
+            logger.debug(f"LINE={line.rstrip()}")
+            return original(self, line)
+        textfsm.TextFSM._CheckLine = debug_checkline
+    
     data = re_table.ParseText("\n".join(pages))
-    df = pd.DataFrame(data, columns=headers)
+    df = pd.DataFrame(data, columns=header)
     # Convert to float and fill with 0
     df[numeric_columns] = (
         df[numeric_columns]
