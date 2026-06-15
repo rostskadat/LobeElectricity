@@ -2,9 +2,6 @@
 """
 Extract bill information from PDF files and generate a report.
 """
-
-from datetime import date
-from email.mime import text
 import sys
 
 try:
@@ -17,7 +14,7 @@ try:
     import re
     import sys
     import yaml
-    from argparse import ArgumentParser, RawTextHelpFormatter
+    from argparse import ArgumentParser, RawTextHelpFormatter, Namespace
     from datetime import datetime
     from dotenv import load_dotenv
     from openpyxl import Workbook
@@ -75,7 +72,7 @@ def main():
         return 1
 
 
-def parse_command_line(defaults):
+def parse_command_line(defaults: dict) -> Namespace:
     parser = ArgumentParser(
         prog="extract_bill_information",
         description=__doc__,
@@ -241,7 +238,7 @@ def parse_command_line(defaults):
     return parser.parse_args()
 
 
-def extract_bill_information(args):
+def extract_bill_information(args: Namespace):
     """
     Extracts and processes bill information from PDF files in a specified input directory.
 
@@ -251,7 +248,7 @@ def extract_bill_information(args):
 
     Args:
         args: An object containing the following attributes:
-            - input_dir (str): Path to the directory containing PDF files.
+            - bill_input (str): Path to the directory containing PDF files.
             - defaults (dict): Default configuration, including 'dispatchers' for extraction.
             - limit (int): Maximum number of files to process. If 0 or less, all files are processed.
 
@@ -299,11 +296,11 @@ def extract_bill_information(args):
     return 0
 
 
-def _list_files_to_process(args):
+def _list_files_to_process(args: Namespace):
     """Returns the list of bills (and loads) to be processed.
 
     Args:
-        args (namespace): the command line arguments
+        args (Namespace): the command line arguments
 
     Returns:
         tuple: the list of bills and the list of loads.
@@ -330,7 +327,7 @@ def _list_files_to_process(args):
     return bills, loads
 
 
-def _list_files_with_extension(input, excludes, extension):
+def _list_files_with_extension(input: str, excludes: list, extension: str):
     """Return the list of file with the specific extension
 
     Args:
@@ -356,7 +353,7 @@ def _list_files_with_extension(input, excludes, extension):
     return files
 
 
-def _dump_bills(dump_prefix, bills):
+def _dump_bills(dump_prefix: str, bills: list):
     """Dump extracted text from a list of bills to a specific folder
 
     Args:
@@ -372,11 +369,11 @@ def _dump_bills(dump_prefix, bills):
                 for page in pdf.pages:
                     f.write(page.extract_text())
     logger.info(
-        f"Dumped {len(bills)} bills to {dirname(dump_prefix)}. Exiting."
+        f"Dumped {len(bills)} bills to {dirname(dump_prefix)}"
     )
 
 
-def _extract_bills(args, files: list):
+def _extract_bills(args: Namespace, files: list):
     """Process all the input bills and construct a dict by CUPS/BILL_ID with all the relevant information
 
     Args:
@@ -433,7 +430,7 @@ def _extract_dispatcher(dispatchers: dict, file: str):
         file (str): The path to the PDF file to be processed.
 
     Returns:
-        Any: The result of the extractor function if a matching dispatcher is found; otherwise, None.
+        dict: The result of the extractor function if a matching dispatcher is found; otherwise, None.
 
     Raises:
         ValueError: If the specified extractor function is not found or is not callable.
@@ -441,26 +438,25 @@ def _extract_dispatcher(dispatchers: dict, file: str):
     """
     logger.info("Extracting information from bill '%s' ...",
                 _readable_path(file))
+    found_extractor = False
     with pdfplumber.open(file) as pdf:
         first_page = pdf.pages[0].extract_text()
-        found_extractor = False
         for dispatcher, extractor in dispatchers.items():
             if extractor not in globals() or not callable(globals()[extractor]):
                 raise ValueError(
-                    f"Extractor '{extractor}' not found or not callable.")
+                    f"Extractor function '{extractor}' not found or not callable.")
             if dispatcher in first_page:
                 logger.debug(
-                    f"Detected '{dispatcher}' bill. Using {extractor} to extract information ..."
+                    f"Detected '{dispatcher}' bill. Using '{extractor}' function ..."
                 )
                 bill_info = globals()[extractor](pdf)
                 return bill_info
-        if not found_extractor:
-            logger.error(
-                f"Could not detect the type of bill for '{file}'. Skipping")
-            return None, None, None
+    if not found_extractor:
+        logger.error(f"Skipping bill '{file}': Unknonw type")
+        return None
 
 
-def extract_plenitude_bill(pdf):
+def extract_plenitude_bill(pdf: pdfplumber.PDF):
     """Extractor for plenitude bills
 
     Args:
@@ -498,7 +494,7 @@ def extract_plenitude_bill(pdf):
     return df.iloc[0].to_dict()
 
 
-def extract_nufri_bill(pdf):
+def extract_nufri_bill(pdf: pdfplumber.PDF):
     """Extractor for Nufri bills
 
     Args:
@@ -538,7 +534,7 @@ def extract_nufri_bill(pdf):
     return df.iloc[0].to_dict()
 
 
-def extract_te_bill(pdf):
+def extract_te_bill(pdf: pdfplumber.PDF):
     """Extractor for Total Energie bills
 
     Args:
@@ -628,7 +624,7 @@ def extract_te_bill(pdf):
     return df.iloc[0].to_dict()
 
 
-def extract_endesa_bill(pdf):
+def extract_endesa_bill(pdf: pdfplumber.PDF):
     """Extractor for Endesa bills
 
     Args:
@@ -664,31 +660,10 @@ def extract_endesa_bill(pdf):
     ) as template:
         extract_endesa_bill.re_table = textfsm.TextFSM(template)
     df = _extract_bill(pdf, extract_endesa_bill.re_table, numeric_cols)
-    # I need to adjust the billing period end by -1 otherwise I
-    # overshoot the contracted power calculation. Except when it's
-    # just one day
-    # if df["billing_period_start"][0] != df["billing_period_end"][0]:
-    # XXX: check that is correct
-    # df["billing_period_end"][0] = df["billing_period_end"][0] - 1
-    # pass
-    # matches = re.findall(
-    #     r"\s*(punta|punta-llano|valle)\s*([\d,]+)\s*kW;?",
-    #     df["endesa_contracted_power"][0],
-    # )
-    # if matches:
-    #     for i in range(1, 7):
-    #         df[f"CP{i}"] = 0.0
-    #     for k, v in dict(matches).items():
-    #         if k == "punta" or k == "punta-llano":
-    #             df[f"CP1"] = locale.atof(v)
-    #         elif k == "valle":
-    #             df[f"CP3"] = locale.atof(v)
-    #         else:
-    #             logger.warning(f"Unknown contracted power {k}")
     return df.iloc[0].to_dict()
 
 
-def extract_qener_bill(pdf):
+def extract_qener_bill(pdf: pdfplumber.PDF):
     """Extractor for Qener bills
 
     Args:
@@ -726,7 +701,19 @@ def extract_qener_bill(pdf):
     return df.iloc[0].to_dict()
 
 
-def _extract_bill(pdf, re_table, numeric_columns):
+def _extract_bill(pdf: pdfplumber.PDF, re_table: textfsm.TextFSM, numeric_columns: list):
+    """Extract the information from a PDF file using the given template
+    
+    Furthermore convert the numerical columns into float
+
+    Args:
+        pdf (pdfplumber.PDF): the PDF file from which to extract information
+        re_table (textfsm.TextFSM): the template that is used to parse the pdf file
+        numeric_columns (list): a list of numerical columns
+
+    Returns:
+        dict: the extracted information
+    """
     pages = [page.extract_text() for page in pdf.pages]
     headers = re_table.header
     data = re_table.ParseText("\n".join(pages))
@@ -847,7 +834,7 @@ def _readable_path(path: str, max_len: int = 70) -> str:
     return f"{parts[0]}.../{parts[-1]}"
 
 
-def _extract_loads(args, files: list):
+def _extract_loads(args: Namespace, files: list):
     loads = {}
     for file in files:
         with open(file, encoding="utf-8") as f:
@@ -886,7 +873,7 @@ def _extract_loads(args, files: list):
     return loads
 
 
-def _generate_workbook(args, bills: dict, loads: dict) -> Workbook:
+def _generate_workbook(args: Namespace, bills: dict, loads: dict) -> Workbook:
     """
     Generates an Excel workbook report from provided bill information.
 
@@ -983,7 +970,7 @@ def _upload_report(workbook: Workbook, bill_id_column: str, cred_file: str, gshe
     logger.info(f"Report '{sheet['name']}' saved to Google Drive ...")
 
 
-def _update_worksheet_incremental(l_worksheet, g_spreadsheet, bill_id_column: str):
+def _update_worksheet_incremental(l_worksheet: Worksheet, g_spreadsheet: gspread.Spreadsheet, bill_id_column: str):
     """Update a specific google worksheet with the values found in the openpyxl worksheet
 
     Args:
@@ -991,7 +978,7 @@ def _update_worksheet_incremental(l_worksheet, g_spreadsheet, bill_id_column: st
         g_spreadsheet (GoogleWorkheet): the google worksheet to update
         bill_id_column (str): the column that represent the billd id (its localized form)
     """
-    l_df = _get_df_from_worksheet(l_worksheet)
+    l_df = _read_from_worksheet(l_worksheet)
     l_title = l_worksheet.title
 
     try:
@@ -1022,7 +1009,8 @@ def _update_worksheet_incremental(l_worksheet, g_spreadsheet, bill_id_column: st
         return
 
     def _extract_bill_id(value):
-        if pd.isna(value): return value
+        if pd.isna(value):
+            return value
         m = re.match(
             r'=HYPERLINK\(".*?";\s*"([^"]+)"\)',
             str(value)
@@ -1035,22 +1023,23 @@ def _update_worksheet_incremental(l_worksheet, g_spreadsheet, bill_id_column: st
     if new_bills.empty:
         logger.info(f"No new bill detected in worksheet '{l_title}' ...")
         return
-    
-    logger.info(f"Appending {len(new_bills)} new bills to worksheet '{l_title}' ...")
+
+    logger.info(
+        f"Appending {len(new_bills)} new bills to worksheet '{l_title}' ...")
     g_worksheet.append_rows(
         new_bills.values.tolist(),
         value_input_option="USER_ENTERED"
     )
 
 
-def _update_worksheet_overwrite(l_worksheet, g_spreadsheet):
+def _update_worksheet_overwrite(l_worksheet: Worksheet, g_spreadsheet: gspread.Spreadsheet):
     """Overwrite a google worksheet with a openpyxl worksheet
 
     Args:
         l_worksheet (worksheet): the openpyxl worksheet
         g_spreadsheet (Google worksheet): the Google worksheet to update
     """
-    l_df = _get_df_from_worksheet(l_worksheet)
+    l_df = _read_from_worksheet(l_worksheet)
     l_title = l_worksheet.title
 
     try:
@@ -1065,7 +1054,7 @@ def _update_worksheet_overwrite(l_worksheet, g_spreadsheet):
     _write_to_worksheet(l_df, g_worksheet)
 
 
-def _write_to_worksheet(l_df, g_worksheet):
+def _write_to_worksheet(l_df, g_worksheet: gspread.Spreadsheet):
     """Write a pandas dataframe to a Google worksheet
 
     Args:
@@ -1076,7 +1065,7 @@ def _write_to_worksheet(l_df, g_worksheet):
                        include_column_header=True)
 
 
-def _get_df_from_worksheet(l_worksheet):
+def _read_from_worksheet(l_worksheet: Worksheet):
     """Return a pandas dataframe from the Openpyxl worksheet
 
     Args:
