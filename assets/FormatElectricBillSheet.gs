@@ -65,13 +65,6 @@ function formatSheet(sheet) {
       const powerColumns = [cl_CP1, cl_CP2, cl_CP3, cl_CP4, cl_CP5, cl_CP6].map(cl => columns[cl]);
       powerColumns.forEach((c, i) => setColumnFormat_(sheet, c, "power"))
 
-      // creating simulated columns...
-      createSimulatedColumns_(sheet, columns, columnsIndices, energyColumns, powerColumns)
-      setColumnFormat_(sheet, columns[cl_simulated_power], "currency");
-      setColumnFormat_(sheet, columns[cl_simulated_energy], "currency");
-      setColumnFormat_(sheet, columns[cl_simulated_gross_amount], "currency");
-      setColumnFormat_(sheet, columns[cl_simulated_variation], "percent");
-
       // Link with the files in Drive
       createLinks_(sheet, columnsIndices[cl_bill_id], columnsIndices[cl_file])
 
@@ -79,6 +72,12 @@ function formatSheet(sheet) {
 
       sortByColumn_(sheet, columnsIndices[cl_billing_period_start])
 
+      // creating simulated columns after sorting the rows ...
+      createSimulatedColumns_(sheet, columns, columnsIndices, energyColumns, powerColumns)
+      setColumnFormat_(sheet, columns[cl_simulated_power], "currency");
+      setColumnFormat_(sheet, columns[cl_simulated_energy], "currency");
+      setColumnFormat_(sheet, columns[cl_simulated_gross_amount], "currency");
+      setColumnFormat_(sheet, columns[cl_simulated_variation], "percent");
 
       hideColumn_(sheet, columnsIndices[cl_billing_date])
       hideColumn_(sheet, columnsIndices[cl_P1])
