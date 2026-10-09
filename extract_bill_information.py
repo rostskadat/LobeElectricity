@@ -2,6 +2,7 @@
 """
 Extract bill information from PDF files and generate a report.
 """
+from datetime import timedelta
 import sys
 
 try:
@@ -146,6 +147,13 @@ def parse_command_line(defaults: dict) -> Namespace:
         help=f"A comma separated list of paths to exclude. By default '{','.join(defaults['load-input-excludes'])}'.",
         required=False,
         default=",".join(defaults["load-input-excludes"]),
+    )
+    parser.add_argument(
+        "--load-max-age-in-days",
+        type=int,
+        help=f"The maximum age of load input files in days. By default '{defaults['load-max-age-in-days']}'.",
+        required=False,
+        default=defaults["load-max-age-in-days"],
     )
     parser.add_argument(
         "--limit",
@@ -316,7 +324,7 @@ def _list_files_to_process(args: Namespace):
         loads = _list_files_with_extension(
             args.load_input, args.load_input_excludes, "csv")
         if loads:
-            logger.info(f"Found {len(loads)} loads in '{args.bill_input}'.")
+            logger.info(f"Found {len(loads)} loads in '{args.load_input}'.")
 
     if args.limit > 0 and (bills or loads):
         bills = bills[: args.limit]
@@ -449,14 +457,14 @@ def _extract_dispatcher(dispatchers: dict, file: str):
                 logger.debug(
                     f"Detected '{dispatcher}' bill. Using '{extractor}' function ..."
                 )
-                bill_info = globals()[extractor](pdf)
+                bill_info = globals()[extractor](file, pdf)
                 return bill_info
     if not found_extractor:
-        logger.error(f"Skipping bill '{file}': Unknonw type")
+        logger.error(f"Skipping bill '{file}': Unknown type")
         return None
 
 
-def extract_plenitude_bill(pdf: pdfplumber.PDF):
+def extract_plenitude_bill(file: str, pdf: pdfplumber.PDF):
     """Extractor for plenitude bills
 
     Args:
@@ -494,7 +502,7 @@ def extract_plenitude_bill(pdf: pdfplumber.PDF):
     return df.iloc[0].to_dict()
 
 
-def extract_nufri_bill(pdf: pdfplumber.PDF):
+def extract_nufri_bill(file: str, pdf: pdfplumber.PDF):
     """Extractor for Nufri bills
 
     Args:
@@ -534,7 +542,7 @@ def extract_nufri_bill(pdf: pdfplumber.PDF):
     return df.iloc[0].to_dict()
 
 
-def extract_te_bill(pdf: pdfplumber.PDF):
+def extract_te_bill(file: str, pdf: pdfplumber.PDF):
     """Extractor for Total Energie bills
 
     Args:
@@ -615,6 +623,9 @@ def extract_te_bill(pdf: pdfplumber.PDF):
         ]
     ].sum(axis=1)
     # unfortunately te_contracted_power is not easily extractible
+    if len(df["te_contracted_power"]) == 0:
+        logger.warning(f"Skipping bill '{file}': Is it a parseable bill ...")
+        return None
     matches = re.findall(r"(P[1-6])\s+([\d,]+)", df["te_contracted_power"][0])
     if matches:
         for i in range(1, 7):
@@ -624,7 +635,7 @@ def extract_te_bill(pdf: pdfplumber.PDF):
     return df.iloc[0].to_dict()
 
 
-def extract_endesa_bill(pdf: pdfplumber.PDF):
+def extract_endesa_bill(file: str, pdf: pdfplumber.PDF):
     """Extractor for Endesa bills
 
     Args:
@@ -663,7 +674,7 @@ def extract_endesa_bill(pdf: pdfplumber.PDF):
     return df.iloc[0].to_dict()
 
 
-def extract_qener_bill(pdf: pdfplumber.PDF):
+def extract_qener_bill(file: str, pdf: pdfplumber.PDF):
     """Extractor for Qener bills
 
     Args:
@@ -703,7 +714,7 @@ def extract_qener_bill(pdf: pdfplumber.PDF):
 
 def _extract_bill(pdf: pdfplumber.PDF, re_table: textfsm.TextFSM, numeric_columns: list):
     """Extract the information from a PDF file using the given template
-    
+
     Furthermore convert the numerical columns into float
 
     Args:
@@ -716,17 +727,18 @@ def _extract_bill(pdf: pdfplumber.PDF, re_table: textfsm.TextFSM, numeric_column
     """
     pages = [page.extract_text() for page in pdf.pages]
     header = re_table.header
-    
+
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(re_table.states)
         logger.debug(re_table.header)
         original = textfsm.TextFSM._CheckLine
+
         def debug_checkline(self, line):
             logger.debug(f"STATE={self._cur_state_name}")
             logger.debug(f"LINE={line.rstrip()}")
             return original(self, line)
         textfsm.TextFSM._CheckLine = debug_checkline
-    
+
     data = re_table.ParseText("\n".join(pages))
     df = pd.DataFrame(data, columns=header)
     # Convert to float and fill with 0
@@ -846,6 +858,9 @@ def _readable_path(path: str, max_len: int = 70) -> str:
 
 
 def _extract_loads(args: Namespace, files: list):
+    today = datetime.today()
+    # TODO: substract args.load_max_age_in_days from today to filter old files
+    cutoff_date = today - timedelta(days=args.load_max_age_in_days)
     loads = {}
     for file in files:
         with open(file, encoding="utf-8") as f:
@@ -853,18 +868,13 @@ def _extract_loads(args: Namespace, files: list):
             for row in reader:
                 cups = row["CUPS"].strip()
                 fecha = row["Fecha"].strip()
+                fecha_dt = datetime.strptime(fecha, "%d/%m/%Y")
+
+                if fecha_dt < cutoff_date:
+                    continue
+
                 hora = row["Hora"].strip()
                 ae_kwh = row["AE_kWh"].strip()
-
-                # Hora starts at 1, while datetime starts at 0
-                dt_str = f"{fecha} {int(hora)-1}"
-                try:
-                    dt = datetime.strptime(dt_str, "%d/%m/%Y %H")
-                except ValueError as e:
-                    logger.error(
-                        f"Could not parse datetime '{dt_str}' in file '{file}': {str(e)}"
-                    )
-                    continue
 
                 # Convert AE_kWh to float
                 try:
@@ -877,10 +887,9 @@ def _extract_loads(args: Namespace, files: list):
                         f"Could not parse AE_kWh '{ae_kwh}' in file '{file}'")
                     continue
 
-                # Insert into loads dict
                 if cups not in loads:
-                    loads[cups] = {}
-                loads[cups][dt] = ae_kwh_val
+                    loads[cups] = []
+                loads[cups].append((fecha, hora, ae_kwh_val))
     return loads
 
 
@@ -913,10 +922,11 @@ def _generate_workbook(args: Namespace, bills: dict, loads: dict) -> Workbook:
 
     ws = wb.active
     ws.title = "Loads"
-    ws.append(["CUPS", "Fecha", "AE_kWh"])
+    ws.append(["CUPS", "Fecha", "Hora", "AE_kWh"])
     for cups, cups_loads in loads.items():
-        for dt, load in cups_loads.items():
-            ws.append([cups, dt, load])
+        for (fecha, hora, load) in cups_loads:
+            ws.append([cups, fecha, hora, load])
+        logger.info(f"Added {len(cups_loads)} loads for CUPS '{cups}'")
 
     sheets = {}
     # Add a new worksheet for each CUPS
@@ -1061,7 +1071,7 @@ def _update_worksheet_overwrite(l_worksheet: Worksheet, g_spreadsheet: gspread.S
     rows, cols = l_df.shape
     g_worksheet = g_spreadsheet.add_worksheet(
         title=l_title, rows=rows, cols=cols)
-    logger.info(f"Overwriting worksheet '{l_title}' ...")
+    logger.info(f"Overwriting worksheet '{l_title}': {rows}x{cols} ...")
     _write_to_worksheet(l_df, g_worksheet)
 
 

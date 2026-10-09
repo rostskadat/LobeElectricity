@@ -13,12 +13,23 @@ function formatAllSheets() {
   const spreadsheet = SpreadsheetApp.getActiveSpreadsheet()
   const sheets = spreadsheet.getSheets();
   sheets.forEach(sheet => {
-    Logger.log("Processing sheet '" + sheet.getName() + "' ...");
-    if (sheet.getName().startsWith('Simulación') ||
-      ['Loads'].includes(sheet.getName())) {
+    if ([
+      'Simulación', 
+      'Simulación-Qener', 
+      'Simulación-TE', 
+      'Global Distribution', 
+      'Hourly Consumption', 
+      'Consumption Charts'
+      ].indexOf(sheet.getName()) != -1) {
       // Skipping...
+    } else if (sheet.getName() === 'Loads') {
+      Logger.log(`Processing sheet '${sheet.getName()}' ...`);
+      FacturasLib.formatLoadsSheet(sheet)
+      FacturasLib.createDistributionSheet(spreadsheet, sheet);
+      FacturasLib.createHourlySheet(spreadsheet, sheet);
     } else {
-      FormatElectricBillSheet.formatSheet(sheet)
+      Logger.log("Processing sheet '" + sheet.getName() + "' ...");
+      FacturasLib.formatBillSheet(sheet)
     }
   });
 }

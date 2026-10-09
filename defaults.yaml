@@ -1,12 +1,15 @@
-# bill-input: /home/rostskadat/Documents/Villa Verde Casa II/Comunidad/Electricidad
-# workbook: bills-Comunidad.xlsx
-# gsheet-id: 1uErkSzfxNqFBKGpsOlhQtoNOp7euY6erFWEdxtt32fc
+bill-input: /home/rostskadat/Documents/Villa Verde Casa II/Comunidad/Electricidad
+load-input: /home/rostskadat/Documents/Villa Verde Casa II/Comunidad/Electricidad/e-Distribucion
+workbook: bills-Comunidad.xlsx
+gsheet-id: 1uErkSzfxNqFBKGpsOlhQtoNOp7euY6erFWEdxtt32fc
 
-bill-input: /home/rostskadat/Documents/Villa Verde Casa II/Contrato Electricidad
-workbook: bills-E74A.xlsx
-gsheet-id: 1nKrjqB1AHhA3br43rSfknFwhRWDx48SX5D9khpohulo
+# bill-input: /home/rostskadat/Documents/Villa Verde Casa II/Contrato Electricidad
+# load-input: /home/rostskadat/Documents/Villa Verde Casa II/Contrato Electricidad/e-Distribucion
+# workbook: bills-E74A.xlsx
+# gsheet-id: 1nKrjqB1AHhA3br43rSfknFwhRWDx48SX5D9khpohulo
 
 # bill-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/CONDES DE ARAGÓN 36 ZARAGOZA/Facturas/Endesa
+# load-input: /home/rostskadat/Documents/Google Drive/SHARED MARTA/Contrato Arrendamiento y compra/CONDES DE ARAGÓN 36 ZARAGOZA/Facturas/Endesa/e-Distribucion
 # workbook: bills-CondesDeAragon36.xlsx
 # gsheet-id: 1xpdbEPHdBmzSODDW61rtfWAgy0GL2A16av7SkxH4RJA
 
@@ -15,9 +18,10 @@ bill-input-excludes:
   - "Paneles/.*"
   - ".*/Contracts/.*"
   - "ES0031300855112011HB0F - Piscina/.*"
-include-loads: False
-load-input: consumption
-load-input-excludes: []
+include-loads: True
+load-input-excludes:
+  - filtered.csv
+load-max-age-in-days: 730
 dump-prefix: dump-
 locale: es_ES.utf8
 limit: -1
